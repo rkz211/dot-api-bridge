@@ -1,0 +1,12 @@
+{
+  "name": "dot-api-shim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check worker.mjs && node --check generic.mjs && node --check helpers.mjs && node --check services.example.mjs",
+    "build": "node build.mjs"
+  }
+}
