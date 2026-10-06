@@ -1,3 +1,4 @@
+import {SERVICES} from './services.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHandler} from './worker.mjs';
@@ -43,16 +44,16 @@ test('raw exceptions do not escape the worker', async () => {
   assert.ok(!(await response.text()).includes(env.HUB_KEY));
 });
 test('upload URL is fixed-host and exact-path with no user info or fragment', () => {
-  const good = 'https://source-storage.example.invalid/site/deploys/deploy/source.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE';
+  const good = `https://${SERVICES.cookiejar.uploadHost}/site/deploys/deploy/source.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE`;
   assert.equal(validateUploadUrl(good, 'site', 'deploy'), good);
-  for (const bad of [good.replace('source-storage.example.invalid','evil.invalid'), good+'#fragment', good.replace('/site/','/other/'), good.replace('https://','https://user@')]) {
+  for (const bad of [good.replace(SERVICES.cookiejar.uploadHost,'evil.invalid'), good+'#fragment', good.replace('/site/','/other/'), good.replace('https://','https://user@')]) {
     assert.throws(() => validateUploadUrl(bad, 'site', 'deploy'));
   }
 });
 test('upload sends no API credential and duplicate ID never repeats the PUT', async () => {
   const rows = new Map(); const ledger = {async get(id){return rows.get(id);}, async claim(id,fingerprint){if(rows.has(id))return false;rows.set(id,{fingerprint,state:'in_progress'});return true;},async set(id,state,result){Object.assign(rows.get(id),{state,result:JSON.stringify(result)});}};
   const bytes = new TextEncoder().encode('synthetic upload');
-  const args = {serviceId:'cookiejar',siteId:'site',deployId:'deploy',uploadUrl:'https://source-storage.example.invalid/site/deploys/deploy/source.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE',bodyBase64:btoa('synthetic upload'),sha256:await digest(bytes),operationId:'12345678-1234-1234-1234-123456789abc'};
+  const args = {serviceId:'cookiejar',siteId:'site',deployId:'deploy',uploadUrl:`https://${SERVICES.cookiejar.uploadHost}/site/deploys/deploy/source.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE`,bodyBase64:btoa('synthetic upload'),sha256:await digest(bytes),operationId:'12345678-1234-1234-1234-123456789abc'};
   let calls = 0; const fetcher = async (_, init) => {calls++; assert.equal(new Headers(init.headers).get('authorization'),null); assert.equal(init.redirect,'manual'); return new Response(null,{status:204});};
   const config = {...env,WRITES_ENABLED:'true'};
   assert.equal((await genericCall('bridge_api_upload',args,config,fetcher,ledger)).state,'completed');

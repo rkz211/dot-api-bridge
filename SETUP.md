@@ -1,6 +1,6 @@
 # Private Sites deployment
 
-This repository supplies source. Each owner needs their own private deployment, service configuration, credentials, plugin connection, and identity binding. Do not copy another person's deployment manifest, identifiers, or secrets.
+This repository supplies source. Cookiejar provider configuration is included. Each owner still needs their own private deployment, credentials, plugin connection, and identity binding. Do not copy another person's deployment manifest, identifiers, or secrets.
 
 Use the current [Sites documentation](https://learn.chatgpt.com/docs/sites) and the Sites tools available in your environment. Also see [plugin setup](https://learn.chatgpt.com/docs/plugins). UI labels and deployment tooling can change; inspect the current tool schema rather than inventing a command.
 
@@ -19,7 +19,7 @@ For a requested full publishing bridge, finish the authorized implementation whi
 The agent should:
 
 1. Read [README.md](README.md), [SECURITY.md](SECURITY.md), and [agent-handoff.md](agent-handoff.md), then inspect the source.
-2. Replace reserved `.invalid` origins in the server-owned registry with verified provider configuration. For Cookiejar, confirm the API origin and source-upload host using its current contract/provider configuration. Do not use the portal's hostname as an API origin by guesswork.
+2. Use the included Cookiejar registry: its fixed API origin and source-upload host are already configured. Verify provider contract changes before changing them; do not replace the API origin with the portal hostname. Project Tree is optional and disabled until its verified HTTPS origin is supplied as `PROJECT_TREE_API_URL` in native runtime Settings.
 3. Keep `HUB_KEY` as an environment-variable name in source, never a secret value. Leave optional services inactive.
 4. Prepare an owner-private Sites project with the MCP capability and stateless `POST /mcp` endpoint. The repository deliberately omits a site-specific `.openai/hosting.json`; create it through the supported Sites workflow with this owner's returned project ID. Do not copy someone else's manifest.
 5. Provision a durable SQL binding named `DB` and apply [schema.sql](schema.sql) before writes. Merely adding a text setting named `DB` does not create a database. Keep `WRITES_ENABLED` unset or `false` initially.
@@ -82,7 +82,7 @@ Suggested approval prompt:
 
 > May I enable this private bridge's write and source-upload capability for Cookiejar? The current code permits generic API mutations beyond publishing. I'll still require the applicable approval for each live action. If you want publishing-only access enforced by the server, I'll add that restriction before enabling writes.
 
-After approval, verify `DB` and the schema, set `WRITES_ENABLED=true`, redeploy, and refresh tool discovery. A flag cannot create absent code. Use the [publishing checklist](agent-handoff.md#cookiejar-publishing-checklist) to identify remaining implementation work and obtain approval for a specific live test.
+After approval, verify `DB` and the schema, set `WRITES_ENABLED=true`, redeploy, and refresh tool discovery. The dedicated create/deploy helpers are included in this version; a flag cannot create absent code in an older deployment. Use the [publishing checklist](agent-handoff.md#cookiejar-publishing-checklist) to identify remaining implementation work and obtain approval for a specific live test.
 
 ## Completion report
 

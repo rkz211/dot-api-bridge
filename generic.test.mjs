@@ -1,7 +1,8 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {genericCall,prepare,clean} from './generic.mjs';import {createHandler} from './worker.mjs';
-const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',OWNER_USER_ID:'owner',WRITES_ENABLED:'true',PROJECT_TREE_ENABLED:'true',PROJECT_TREE_INGEST_TOKEN:'DUMMY_TREE_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
+import {SERVICES} from './services.mjs';
+import {test} from 'node:test';import assert from 'node:assert/strict';import {genericCall,prepare,clean,decodeBody} from './generic.mjs';import {createHandler} from './worker.mjs';
+const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',OWNER_USER_ID:'owner',WRITES_ENABLED:'true',PROJECT_TREE_ENABLED:'true',PROJECT_TREE_API_URL:'https://project-tree-api.example.invalid',PROJECT_TREE_INGEST_TOKEN:'DUMMY_TREE_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
 function ledger(){const rows=new Map();return {rows,async get(k){return rows.get(k)},async claim(k,f){if(rows.has(k))return false;rows.set(k,{fingerprint:f,state:'in_progress'});return true;},async set(k,s,r){Object.assign(rows.get(k),{state:s,result:JSON.stringify(r)});}}}
-test('generic GET/HEAD uses fixed service auth and allows only safe headers',async()=>{for(const method of ['GET','HEAD']){const r=await genericCall('bridge_api_read',{...read,method,headers:{Accept:'application/json'}},env,async(u,o)=>{assert.equal(u,'https://cookiejar-api.example.invalid/me');assert.equal(o.headers.get('Authorization'),'Bearer '+env.HUB_KEY);assert.equal(o.headers.get('X-Site'),'example-site');assert.equal(o.redirect,'manual');return Response.json({ok:true});});assert.equal(r.status,200);}});
+test('generic GET/HEAD uses fixed service auth and allows only safe headers',async()=>{for(const method of ['GET','HEAD']){const r=await genericCall('bridge_api_read',{...read,method,headers:{Accept:'application/json'}},env,async(u,o)=>{assert.equal(u,SERVICES.cookiejar.baseUrl+'/me');assert.equal(o.headers.get('Authorization'),'Bearer '+env.HUB_KEY);assert.equal(o.headers.get('X-Site'),'example-site');assert.equal(o.redirect,'manual');return Response.json({ok:true});});assert.equal(r.status,200);}});
 test('SSRF/traversal/origin/query/header injection and credential routes rejected',()=>{for(const path of ['https://evil.invalid','//evil.invalid','/../key','/%2e%2e/key','/%252e/key','/a\\b','/x?target=evil','/x#evil','/key','/env','/sites/x/rotate','/admin/sites','/v1/auth','/sites/x/env'])assert.throws(()=>prepare({...read,path},env));for(const header of ['Authorization','X-Site','Host','Cookie','Proxy-Authorization','X-Forwarded-Host'])assert.throws(()=>prepare({...read,headers:{[header]:'bad'}},env));assert.throws(()=>prepare({...read,query:{token:'secret'}},env));});
 test('all generic write methods use durable ledger and never retry',async()=>{for(const method of ['POST','PUT','PATCH','DELETE']){let n=0;const l=ledger(),args={serviceId:'cookiejar',method,path:'/c/test/item',siteId:'s1',operationId:id,bodyJson:{value:'approved'}};const f=async(u,o)=>{n++;assert.equal(o.method,method);return Response.json({ok:true});};assert.equal((await genericCall('bridge_api_write',args,env,f,l)).state,'completed');assert.equal((await genericCall('bridge_api_write',args,env,f,l)).replayed,true);assert.equal(n,1);await assert.rejects(()=>genericCall('bridge_api_write',{...args,path:'/c/other/item'},env,f,l));}});
 test('network uncertainty and HTTP500 persist reconciliation, never replay mutation',async()=>{for(const failure of ['network','500']){let n=0;const l=ledger(),args={serviceId:'cookiejar',method:'POST',path:'/sites',bodyJson:{name:'Requested'},operationId:id};const f=async()=>{n++;if(failure==='network')throw Error(env.HUB_KEY);return Response.json({error:env.HUB_KEY},{status:500});};const r=await genericCall('bridge_api_write',args,env,f,l);assert.equal(r.state,'needs_reconciliation');await genericCall('bridge_api_write',args,env,f,l);assert.equal(n,1);assert.ok(!JSON.stringify([...l.rows.values()]).includes(env.HUB_KEY));}});
@@ -14,3 +15,38 @@ test('preview does not call upstream or grant approval',async()=>{const r=await 
 test('owner required and unknown arguments blocked for generic tools',async()=>{let n=0;const h=createHandler(()=>{n++});const request=(user,args)=>new Request('https://bridge.invalid/mcp',{method:'POST',headers:{'content-type':'application/json','oai-authenticated-user-id':user},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'bridge_api_read',arguments:args}})});assert.equal((await h(request('intruder',read),env)).status,403);const j=await(await h(request('owner',{...read,apiKey:'forbidden'}),env)).json();assert.equal(j.error.code,-32602);assert.equal(n,0);});
 
 test('generic operation status reads durable state without external calls',async()=>{const l=ledger();await l.claim(id,'fingerprint');await l.set(id,'needs_reconciliation',{notice:'inspect upstream'});const r=await genericCall('bridge_operation_status',{operationId:id},env,()=>{throw Error('must not call')},l);assert.equal(r.state,'needs_reconciliation');});
+
+test('login and session routes are blocked at every depth without upstream requests',async()=>{
+ let calls=0;
+ for(const path of ['/login','/login/challenge','/v1/LOGIN','/%6cogin/challenge','/session','/sessions','/v1/sign-in','/logout','/authentication']){
+  await assert.rejects(()=>genericCall('bridge_api_read',{...read,path},env,()=>{calls++;}));
+  await assert.rejects(()=>genericCall('bridge_api_write',{serviceId:'cookiejar',method:'POST',path,bodyJson:{accountId:'synthetic',proof:'synthetic'},operationId:id},env,()=>{calls++;},ledger()));
+ }
+ assert.equal(calls,0);
+});
+test('session-shaped input fields rejected and response fields redacted before persistence',async()=>{
+ const keys=['session','sessions','sessionId','session_id','sessionToken','session_token','sessionKey','sessionSecret','SESSION-TOKEN','session.token'];
+ for(const key of keys){
+  assert.throws(()=>prepare({...read,query:{[key]:'synthetic'}},env));
+  assert.throws(()=>prepare({...read,method:'POST',bodyJson:{nested:{[key]:'synthetic'}}},env));
+ }
+ const payload={nested:Object.fromEntries(keys.map(k=>[k,'sess_SYNTHETIC']))};
+ const l=ledger();const result=await genericCall('bridge_api_write',{serviceId:'cookiejar',method:'POST',path:'/sites',bodyJson:{name:'Synthetic'},operationId:id},env,async()=>Response.json(payload),l);
+ assert.ok(!JSON.stringify(result).includes('sess_SYNTHETIC'));
+ assert.ok(!JSON.stringify([...l.rows.values()]).includes('sess_SYNTHETIC'));
+ for(const key of keys)assert.equal(result.result.response.bodyJson.nested[key],'[REDACTED]');
+});
+
+ test('optional Project Tree endpoint is inactive unless a safe server setting is present',async()=>{
+ for(const url of [undefined,'http://bad.invalid','https://user:pass@bad.invalid','https://bad.invalid/path','https://bad.invalid/?token=x']){
+ const settings={...env,PROJECT_TREE_API_URL:url};
+ const status=await genericCall('bridge_services',{},settings,()=>{throw Error('No network');});
+ assert.equal(status.services.find(s=>s.serviceId==='projecttree').enabled,false);
+ assert.throws(()=>prepare({serviceId:'projecttree',method:'POST',path:'/',bodyJson:{action:'tree'}},settings));
+ }
+});
+
+test('base64 decoded body enforces exact 512 KiB cap despite padding rounding',()=>{
+ assert.equal(decodeBody(Buffer.alloc(512*1024).toString('base64')).length,512*1024);
+ assert.throws(()=>decodeBody(Buffer.alloc(512*1024+1).toString('base64')));
+});

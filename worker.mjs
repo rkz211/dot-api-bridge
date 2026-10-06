@@ -1,4 +1,5 @@
 import {GENERIC_TOOLS, genericCall, clean} from './generic.mjs';
+import {EXTRA_TOOLS, extraCall} from './writes.mjs';
 import {SERVICES} from './services.mjs';
 const MAX_REQUEST = 1024 * 1024;
 const CONNECTION = {
@@ -7,7 +8,7 @@ const CONNECTION = {
   inputSchema: {type: 'object', properties: {}, required: [], additionalProperties: false},
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
 };
-const TOOLS = [CONNECTION, ...GENERIC_TOOLS];
+const TOOLS = [CONNECTION, ...GENERIC_TOOLS, ...EXTRA_TOOLS];
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: {'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff'}
 });
@@ -39,7 +40,7 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
     try {rpc = await readRequest(request);} catch {return error(null, -32700, 'Invalid or oversized JSON');}
     const id = rpc?.id ?? null;
     if (!rpc || Array.isArray(rpc) || rpc.jsonrpc !== '2.0' || typeof rpc.method !== 'string') return error(id, -32600, 'Invalid request');
-    if (rpc.method === 'initialize') return result(id, {protocolVersion: '2024-11-05', capabilities: {tools: {}}, serverInfo: {name: 'dot-api-shim', version: '0.1.0'}});
+    if (rpc.method === 'initialize') return result(id, {protocolVersion: '2024-11-05', capabilities: {tools: {}}, serverInfo: {name: 'dot-api-shim', version: '0.2.0'}});
     if (rpc.method === 'notifications/initialized') return new Response(null, {status: 202});
     if (rpc.method === 'ping') return result(id, {});
     if (rpc.method === 'tools/list') return result(id, {tools: TOOLS.filter(t => t.annotations.readOnlyHint || env.WRITES_ENABLED === 'true')});
@@ -55,7 +56,9 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
     if (!env.OWNER_USER_ID || user !== env.OWNER_USER_ID) return error(id, -32001, 'Owner authentication required', 403);
     if (!tool.annotations.readOnlyHint && env.WRITES_ENABLED !== 'true') return error(id, -32002, 'Writes are disabled');
     try {
-      const value = await genericCall(name, args, env, fetcher);
+      const value = EXTRA_TOOLS.some(t => t.name === name)
+        ? await extraCall(name, args, env, fetcher, readRequest)
+        : await genericCall(name, args, env, fetcher);
       const secrets = Object.values(SERVICES).map(s => env[s.credentialEnv]).filter(Boolean);
       return result(id, {content: [{type: 'text', text: JSON.stringify(clean(value, secrets))}], isError: false});
     } catch {

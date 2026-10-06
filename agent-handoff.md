@@ -4,12 +4,12 @@ Use this guide with [SETUP.md](SETUP.md). The repository is implementation mater
 
 ## Take ownership of implementation
 
-Inspect [worker.mjs](worker.mjs), [generic.mjs](generic.mjs), [helpers.mjs](helpers.mjs), and the service registry before saying a capability is missing. Complete authorized code and configuration work yourself. Ask the owner for consent, native secret entry, connection, or a genuinely missing decision; don't ask them to implement the remaining adapter.
+Inspect [worker.mjs](worker.mjs), [generic.mjs](generic.mjs), [helpers.mjs](helpers.mjs), [writes.mjs](writes.mjs), and the service registry before saying a capability is missing. Complete authorized code and configuration work yourself. Ask the owner for consent, native secret entry, connection, or a genuinely missing decision; don't ask them to implement the remaining adapter.
 
-The source already contains generic read, write, signed-source-upload, and operation-status tools. Writes are deliberately disabled at runtime by default. Distinguish:
+The source contains generic tools plus dedicated Cookiejar owned-site, create-site, deploy-site, and operation-status helpers. Writes are deliberately disabled at runtime by default. Distinguish:
 
 - Missing implementation: the necessary request/response or upload flow is not supported by code.
-- Missing configuration: placeholder origin, disabled service, absent secret, missing database/schema, or an unapplied saved version.
+- Missing configuration: disabled service, absent secret, missing optional endpoint setting, missing database/schema, or an unapplied saved version.
 - Missing connection: the Site's plugin is not installed/connected in this conversation.
 - Missing owner binding: the authenticated caller does not match `OWNER_USER_ID`.
 - Missing authorization: the owner has not approved the access expansion or exact live action.
@@ -26,9 +26,22 @@ The source already contains generic read, write, signed-source-upload, and opera
 - Configure durable `DB` storage with [schema.sql](schema.sql). Keep writes disabled while building and connecting.
 - Run the tests, syntax checks, and build. Follow [SETUP.md](SETUP.md) for private deployment, owner secret entry, plugin connection, exact identity binding, and authenticated reads.
 
+## Preferred dedicated publishing flow
+
+After completing [SETUP.md](SETUP.md), use the following tools for an authorized small-source publish:
+
+1. Call `cookiejar_owned_sites({})` to resolve an existing owned site. If the user approved creating a site and the associated credential, call `cookiejar_create_site({"name":"Approved test site","operationId":"REPLACE_WITH_NEW_LOWERCASE_UUID"})`. Record the returned site ID; the token is deliberately excluded.
+2. Prepare a valid source ZIP no larger than 512 KiB, with a root `package.json`, needed lockfile/build scripts, and only the approved content. Compute its SHA-256 from the exact bytes. Exclude secrets and dependencies. The helper validates archive structure, unsafe paths, symlinks, duplicate/overlapping entries, compression methods, and declared expansion limits; it does not prove application code is safe.
+3. Call `cookiejar_deploy_site` with `siteId`, a different new lowercase UUID `operationId`, `sourceZipBase64`, lowercase `sourceSha256`, and `kind` (`static` or `server`). For static builds, optionally supply the relative `outputDir` required by the current provider contract. For server builds, obtain the credential-creation approval described below.
+4. The helper checks ownership, creates the deployment, uploads the ZIP without the API key to the exact validated signed object, and starts the build. It records intermediate deployment identity for reconciliation and never automatically repeats an uncertain mutation. A result with `status: "started"` means build start only.
+5. Poll `bridge_api_read({"serviceId":"cookiejar","method":"GET","path":"/deploy/REPLACE_WITH_RETURNED_DEPLOY_ID","siteId":"REPLACE_WITH_VERIFIED_SITE_ID"})` until the provider reaches a terminal status. Verify the correct build is active and inspect its returned live URL/content. Report failure or supersession explicitly.
+6. If a call is interrupted, use `cookiejar_operation_status({"operationId":"REPLACE_WITH_ORIGINAL_UUID"})` and read upstream state before taking further action. Preserve operation IDs and do not force a retry with a new one.
+
+These are placeholder examples: replace IDs with verified values, and obtain all required approvals before execution. `cookiejar_deploy_site` is the full prepare/upload/start path for supported ZIPs; an archive larger than the bound needs a separately implemented and reviewed upload flow.
+
 ## Cookiejar publishing checklist
 
-The following maps the current provider contract to the existing generic tools. Re-read the contract before execution. All mutations need applicable authorization; the examples below are a plan, not permission to run them.
+The following maps the current provider contract to the lower-level generic tools. Prefer the dedicated flow above for creation and source deployment. Re-read the contract before execution. All mutations need applicable authorization; the examples below are a plan, not permission to run them.
 
 | Stage | Request/tool | Required evidence |
 | --- | --- | --- |
@@ -66,12 +79,12 @@ If a hostname is already attached elsewhere, do not remove or move it automatica
 
 These are current implementation limits, not reasons to abandon an authorized task or claim all connectors are unavailable:
 
-- Generic bodies and responses are bounded at approximately 512 KiB; the MCP request envelope has a 1 MiB cap. The signed-source upload is base64-in-JSON, with a nominal 512 KiB decoded limit. Many real projects will not fit even when the provider accepts larger archives. There is no streaming, multipart, or chunked upload implementation. Review and implement a bounded alternative before promising large-project publishing; do not simply raise limits without considering memory and request limits.
+- Generic bodies and responses are bounded at 512 KiB; the MCP request envelope has a 1 MiB cap. The signed-source upload is base64-in-JSON, with a 512 KiB decoded limit. Many real projects will not fit even when the provider accepts larger archives. There is no streaming, multipart, or chunked upload implementation. Review and implement a bounded alternative before promising large-project publishing; do not simply raise limits without considering memory and request limits.
 - The upload tool supports only source ZIPs. It cannot complete ordinary Cookiejar file-tier signed uploads requiring provider-returned headers, arbitrary signed destinations, or Project Tree large-file uploads. Those need a separately reviewed adapter.
 - Source download routes can return private signed URLs. The generic read tool does not become an arbitrary signed-URL download client, and binary responses remain size-limited. A clone/download workflow needs a supported, authorized path of its own.
-- There are no dedicated create-site, deploy, or domain tools or end-to-end orchestrator. Generic write requests cover permitted API routes, but target resolution, sequence, polling, error recovery, and final verification remain caller responsibilities.
+- Dedicated create/deploy helpers now handle the supported prepare/upload/start sequence. There is no dedicated domain helper, automatic build-completion watcher, or automatic reconciliation. Final status/content checks and any approved domain work remain caller responsibilities.
 - The global write flag is broader than publishing. The code does not enforce per-site write grants, a publishing-only route allowlist, domain ownership/assignment policy, or confirmation receipts. Add server-side restrictions when required; never present agent instructions as enforced access controls.
-- Configured credential/admin/environment paths are intentionally blocked. The blocklist is incomplete: `/login` and `/login/challenge` are not blocked, and a response field named `session` is not covered by the credential-field redactor. Do not use generic tools for login, session issuance, credential export, or other credential-management flows. They require a separate secure workflow and stronger server-side route/redaction controls before exposure. Broad text/binary bodies are not guaranteed secret-free.
+- Login/session paths are now blocked after decoding at every path depth, alongside the configured credential/admin/environment paths. Session-shaped JSON fields are rejected on input and redacted in responses and stored generic results. Regression tests cover these restrictions. This remains a blocklist, not proof every future credential route is covered: use a separate secure workflow for credential management. Broad text/binary bodies are not guaranteed secret-free.
 - Local mocks do not test real Sites OAuth, native secret provisioning, the deployed SQL database, live Cookiejar publication, DNS, or TLS. A read-only smoke test establishes only the reads actually tested.
 
 ## Troubleshoot the actual failing layer
@@ -92,7 +105,7 @@ Report the exact tool, sanitized arguments/target, error code or status, and sma
 
 ## Optional Project Tree
 
-Project Tree is independent of Cookiejar. Leave `PROJECT_TREE_ENABLED` off unless requested; it requires its own verified endpoint/contract and native `PROJECT_TREE_INGEST_TOKEN` secret.
+Project Tree is independent of Cookiejar. Leave `PROJECT_TREE_ENABLED` off unless requested; it requires its own verified endpoint/contract, native `PROJECT_TREE_API_URL` HTTPS origin setting, and native `PROJECT_TREE_INGEST_TOKEN` secret. If the origin is missing or invalid, service readiness reports it disabled.
 
 The example adapter uses POST `/` JSON actions with `x-ingest-token`. Inspect its actual `readActions` and `writeActions` in [services.example.mjs](services.example.mjs); POST alone does not mean mutation. `mailread` changes state and is not enabled. Credential actions such as `issue`/`mapkey`, unreviewed voice actions, and remote `sourceUrl` fetching are not exposed. Explain the credential's scope before enabling access. For edits, resolve and read the target first, distinguish append/replacement, and reconcile uncertain outcomes; do not assume optimistic concurrency support.
 

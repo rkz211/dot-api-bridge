@@ -9,12 +9,13 @@ This is source you deploy into your own private Sites account. It is not a share
 - [Installation](SETUP.md): step-by-step setup, owner prompts, and verification gates
 - [Instructions for your dot](agent-handoff.md): implementation checklist, Cookiejar publishing sequence, and troubleshooting
 - [Security model and limits](SECURITY.md): trust boundary, route policy, opaque payloads, and uncertain writes
+- [Small publishing sample](examples/README.md): reproducible source for an authorized live test
 
 The bridge does not call an LLM API or need an LLM API key. Hosting and upstream API costs depend on your providers.
 
 ## What is already implemented?
 
-The public source already exposes these MCP tools in [worker.mjs](worker.mjs) and [generic.mjs](generic.mjs):
+The public source already exposes these MCP tools in [worker.mjs](worker.mjs), [generic.mjs](generic.mjs), and [writes.mjs](writes.mjs):
 
 | Tool | Implemented behavior |
 | --- | --- |
@@ -25,10 +26,16 @@ The public source already exposes these MCP tools in [worker.mjs](worker.mjs) an
 | `bridge_api_write` | Fixed-origin POST/PUT/PATCH/DELETE with a durable operation ledger |
 | `bridge_api_upload` | Cookiejar source ZIP PUT to a validated signed URL, with matching SHA-256 |
 | `bridge_operation_status` | Reads the stored outcome without repeating a mutation |
+| `cookiejar_owned_sites` | Lists owned-site metadata with credentials excluded |
+| `cookiejar_create_site` | Creates one requested named site with durable duplicate protection; strips the returned token |
+| `cookiejar_deploy_site` | Checks ownership and ZIP/hash, prepares a deploy, uploads to its signed source URL, and starts the build |
+| `cookiejar_operation_status` | Reads the dedicated create/deploy operation outcome |
 
 Write and upload tools are hidden from discovery while `WRITES_ENABLED` is off. They are present in the code. Turning the flag on does not implement missing routes, provision storage, grant user consent, or prove a deployment works.
 
-These are generic request tools, not a complete publishing assistant. Cookiejar create/deploy/domain API requests can use the write tool when configuration, policy, credentials, and approval permit. The caller must orchestrate the steps and verify the outcome. See the [publishing checklist and actual gaps](agent-handoff.md#cookiejar-publishing-checklist).
+For Cookiejar publishing, prefer the dedicated create/deploy helpers. They provide a bounded source-upload/build-start flow with ZIP checks and ownership validation. The caller must still poll the build and verify the live result. Generic tools remain available for reviewed requests, including domain API steps when specifically authorized. See the [publishing checklist and actual gaps](agent-handoff.md#cookiejar-publishing-checklist).
+
+The dedicated helper accepts source ZIPs up to 512 KiB; it does not implement streaming or arbitrary file uploads. See the [ready-to-use publishing flow](agent-handoff.md#preferred-dedicated-publishing-flow).
 
 ## What the agent does and what the owner does
 
@@ -54,7 +61,7 @@ For Cookiejar-only use, leave Project Tree disabled. No Project Tree account or 
 
 This is a prototype, not a security certification. A fixed origin and blocked-route list are not a full service-specific permission model. Arbitrary text and binary payloads cannot be proven free of secrets. Review an API's exact contract and the user's permissions before enabling it. Keep the deployed Site private.
 
-The tests use synthetic data, fake credentials, and mocked upstream calls. They do not establish that your live deployment, account access, or write operations work. Configuration examples intentionally contain placeholders and must not be deployed unchanged.
+The tests use synthetic data, fake credentials, and mocked upstream calls. They do not establish that your live deployment, account access, or write operations work. Cookiejar provider configuration is included. Owner identity, credentials, runtime flags, and the Site-specific hosting manifest still require native setup.
 
 ## License
 
@@ -74,16 +81,17 @@ The build places the worker entry point at `dist/server/index.js`. Provision a D
 
 ## Configuration
 
-Edit `services.example.mjs` or replace the re-export in `services.mjs` with your reviewed registry. The checked-in `.invalid` hosts are placeholders. Never replace credential environment-variable names with secret values.
+The default registry in `services.example.mjs`, re-exported by `services.mjs`, contains the Cookiejar API origin and source-upload host. No Cookiejar adapter editing is required. These are provider infrastructure addresses, not credentials. Keep credential environment-variable names in source and enter their values only in native runtime Settings. Optional Project Tree gets its verified origin from `PROJECT_TREE_API_URL`.
 
 Native runtime settings:
 
 - `OWNER_USER_ID`: exact Sites-managed authenticated owner identifier
 - `HUB_KEY`: Cookiejar API secret
 - `COOKIEJAR_ENABLED=true`: activate the reviewed Cookiejar service configuration
+- `PROJECT_TREE_API_URL`: optional verified HTTPS Project Tree origin, with no credentials, query, or path
 - `PROJECT_TREE_INGEST_TOKEN`: Project Tree API secret
 - `PROJECT_TREE_ENABLED=true`: activate the reviewed Project Tree service configuration
 - `WRITES_ENABLED=true`: enable write tools only after approved access expansion and durable storage setup
 - `DB`: platform-provisioned durable SQL binding, not a text secret
 
-Cookiejar and Project Tree are both inactive unless their activation flag is set. Writes also require their separate flag. Project Tree supports a reviewed JSON-action allowlist; it does not expose every upstream action. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Project Tree large-file signed upload completion needs a separately reviewed flow.
+Cookiejar and Project Tree are both inactive unless their activation flag is set; Project Tree also requires a valid server-configured origin. Writes also require their separate flag. Project Tree supports a reviewed JSON-action allowlist; it does not expose every upstream action. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Project Tree large-file signed upload completion needs a separately reviewed flow.

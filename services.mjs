@@ -1,2 +1,2 @@
-// Replace this template with your reviewed, server-owned service registry.
+// Ready-configured Cookiejar plus an optional server-configured Project Tree adapter.
 export {SERVICES} from './services.example.mjs';
