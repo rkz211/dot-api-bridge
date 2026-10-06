@@ -6,11 +6,39 @@ This is source you deploy into your own private Sites account. It is not a share
 
 ## Start here
 
-- [Installation](SETUP.md): managed OAuth, native hosted secrets, and owner binding
-- [Instructions for your dot](agent-handoff.md): a self-contained setup handoff for Cookiejar and Project Tree
+- [Installation](SETUP.md): step-by-step setup, owner prompts, and verification gates
+- [Instructions for your dot](agent-handoff.md): implementation checklist, Cookiejar publishing sequence, and troubleshooting
 - [Security model and limits](SECURITY.md): trust boundary, route policy, opaque payloads, and uncertain writes
 
 The bridge does not call an LLM API or need an LLM API key. Hosting and upstream API costs depend on your providers.
+
+## What is already implemented?
+
+The public source already exposes these MCP tools in [worker.mjs](worker.mjs) and [generic.mjs](generic.mjs):
+
+| Tool | Implemented behavior |
+| --- | --- |
+| `bridge_connection_info` | Returns the authenticated caller ID and owner-binding status, never credentials |
+| `bridge_services` | Reports service activation and whether a credential is configured |
+| `bridge_api_preview` | Validates a request without contacting the API |
+| `bridge_api_read` | Fixed-origin GET/HEAD, plus reviewed read-only Project Tree JSON actions |
+| `bridge_api_write` | Fixed-origin POST/PUT/PATCH/DELETE with a durable operation ledger |
+| `bridge_api_upload` | Cookiejar source ZIP PUT to a validated signed URL, with matching SHA-256 |
+| `bridge_operation_status` | Reads the stored outcome without repeating a mutation |
+
+Write and upload tools are hidden from discovery while `WRITES_ENABLED` is off. They are present in the code. Turning the flag on does not implement missing routes, provision storage, grant user consent, or prove a deployment works.
+
+These are generic request tools, not a complete publishing assistant. Cookiejar create/deploy/domain API requests can use the write tool when configuration, policy, credentials, and approval permit. The caller must orchestrate the steps and verify the outcome. See the [publishing checklist and actual gaps](agent-handoff.md#cookiejar-publishing-checklist).
+
+## What the agent does and what the owner does
+
+The agent inspects the source and current contracts, completes authorized implementation, runs checks, prepares and publishes the authorized private bridge, presents its plugin connection, and verifies authenticated reads. It should not hand unfinished coding back to the owner as a setup instruction.
+
+The owner approves the requested access, enters their own upstream credential in native Sites Settings, and completes the plugin's connection/consent flow. The agent obtains the exact Sites caller ID from `bridge_connection_info`; the owner does not need to invent or look up an `OWNER_USER_ID` from email.
+
+Keep these milestones separate: **code ready → private bridge deployed → secret configured → plugin connected → owner bound → authenticated read verified → write capability approved/configured → specific live action verified**. Publishing the bridge is separate from publishing a website through Cookiejar.
+
+For Cookiejar-only use, leave Project Tree disabled. No Project Tree account or token is needed.
 
 ## Design
 
