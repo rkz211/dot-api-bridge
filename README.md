@@ -30,7 +30,7 @@ The tests use synthetic data, fake credentials, and mocked upstream calls. They 
 
 ## License
 
-No reuse license has been selected yet. This repository does not currently grant an open-source license.
+MIT. See [LICENSE](LICENSE).
 
 ## Local checks
 
