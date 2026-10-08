@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<title>Private API bridge · Connections</title>
+<style data-bridge-style>/*__STYLES__*/</style>
+</head>
+<body>
+<div id="space-background" class="space-background" aria-hidden="true">
+  <div class="space-wormhole"><span class="space-signal"></span></div>
+</div>
+<a class="skip-link" href="#main">Skip to connections</a>
+<div class="app-shell">
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Private API bridge, home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h5v10H5M19 7h-5v10h5M8 12h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Private API bridge</span></a>
+  <span class="private-label"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.4"/></svg>Private setup</span>
+</header>
+<main id="main">
+  <div class="page-heading"><p class="eyebrow">YOUR CONNECTIONS</p><h1>What do you want to connect?</h1><p class="intro">Choose a service, add its key, then tell your dot what to do.</p></div>
+  <div id="network-banner" class="banner banner-warning" role="status" hidden></div>
+  <section class="intent-section" aria-label="Find a service">
+    <label for="service-search" class="field-label">Service name or website</label>
+    <div class="search-wrap"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.8" cy="8.8" r="5.8" stroke="currentColor" stroke-width="1.5"/><path d="m13.2 13.2 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="service-search" type="search" placeholder="Which service would you like to use?" maxlength="500" autocomplete="off" spellcheck="false" aria-describedby="search-hint" aria-controls="connection-list connection-panel"></div>
+    <p id="search-hint" class="field-hint">A name, website, or agent-instructions link is enough. Don’t enter a key here.</p>
+  </section>
+  <div class="workspace">
+    <aside class="connection-sidebar" aria-label="Prepared services">
+      <div class="section-heading"><h2>Prepared services</h2><span id="connection-count" class="count">0</span></div>
+      <div id="connection-list" class="connection-list" aria-busy="true"></div>
+      <div class="sidebar-help"><span class="small-icon" aria-hidden="true">?</span><p>Don’t see your service?<br>Type its name above to get started.</p></div>
+    </aside>
+    <section id="connection-panel" class="connection-panel" aria-label="Connection details" aria-busy="true"></section>
+  </div>
+  <footer class="page-footer"><p>Keys are saved on this private Site’s server, never in browser storage. Administrators with database access may read stored keys.</p></footer>
+</main>
+</div>
+<div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<noscript><div class="noscript">JavaScript is needed to set up connections. Turn it on, then reload this page. Do not put API keys in chat.</div></noscript>
+<script data-bridge-script>/*__CLIENT__*/</script>
+</body>
+</html>

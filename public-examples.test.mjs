@@ -23,7 +23,7 @@ test('public registry contains only the documented provider and synthetic RPC ex
 test('RPC test fixtures use only fictional settings, credentials, actions, and hosts',()=>{
  const source=readFileSync(new URL('./generic.test.mjs',import.meta.url),'utf8');
  const settingNames=[...new Set(source.match(/\b[A-Z][A-Z0-9_]+_(?:ENABLED|API_URL|KEY|TOKEN)\b/g))].sort();
- assert.deepEqual(settingNames,['COOKIEJAR_ENABLED','EXAMPLE_RPC_API_URL','EXAMPLE_RPC_ENABLED','EXAMPLE_RPC_KEY','HUB_KEY','WRITES_ENABLED']);
+ assert.deepEqual(settingNames,['COOKIEJAR_ENABLED','EXAMPLE_RPC_API_URL','EXAMPLE_RPC_ENABLED','EXAMPLE_RPC_KEY','HUB_KEY']);
  const serviceIds=[...new Set([...source.matchAll(/serviceId:'([^']+)'/g)].map(match=>match[1]))].sort();
  assert.deepEqual(serviceIds,['cookiejar','example_rpc']);
  const urls=[...source.matchAll(/https?:\/\/[^'"\s]+/g)].map(match=>new URL(match[0]));

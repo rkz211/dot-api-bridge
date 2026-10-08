@@ -1,2 +1,2 @@
-// Cookiejar configuration plus a disabled-by-default fictional RPC example.
-export {SERVICES} from './services.example.mjs';
+import {SERVICES as DEFAULT_SERVICES} from './services.example.mjs';
+export const SERVICES=Object.freeze({...DEFAULT_SERVICES,cookiejar:Object.freeze({...DEFAULT_SERVICES.cookiejar,displayName:'Cookiejar',description:'Build and manage websites with your dot.',keyHelpUrl:'https://cookiejar.lol/',keyHelpText:'Cookiejar currently has a waitlist. If you have access, use your account sites key (starts with sites_), not a per-site hub_ token. Paste the key alone, without HUB_KEY=, quotes, or Bearer.',accessDescription:'This key can read and update the Cookiejar sites it owns. Your dot still follows your instructions for each action.',sourceUrl:'https://cookiejar.lol/agent',testRequest:{method:'GET',path:'/sites'}})});

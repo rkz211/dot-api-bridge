@@ -43,7 +43,7 @@ export async function extraCall(name,args,env,fetcher,readJson,ledgerOverride){
  if(!UUID.test(args.operationId??''))throw Error('Valid operationId required');
  const ledger=ledgerOverride||(env.DB?createLedger(env.DB):null);if(!ledger)throw Error('Durable operation storage unavailable');
  if(name==='cookiejar_operation_status'){const row=await ledger.get(args.operationId);return row?{operationId:args.operationId,state:row.state,result:row.result?JSON.parse(row.result):null}:{operationId:args.operationId,state:'not_found'};}
- if(env.WRITES_ENABLED!=='true')throw Error('Write capabilities are disabled');
+
  let bytes,body;
  if(name==='cookiejar_create_site'){if(typeof args.name!=='string'||!args.name.trim()||args.name.length>100||/[\x00-\x1f]/.test(args.name))throw Error('Invalid site name');body={name:args.name.trim()};}
  else if(name==='cookiejar_deploy_site'){

@@ -4,7 +4,7 @@ import {genericCall} from './generic.mjs';
 import {extraCall, digest} from './writes.mjs';
 import {SERVICES} from './services.mjs';
 
-const env = {COOKIEJAR_ENABLED: 'true', HUB_KEY: 'FAKE_TIMEOUT_TEST_KEY', WRITES_ENABLED: 'true'};
+const env = {COOKIEJAR_ENABLED: 'true', HUB_KEY: 'FAKE_TIMEOUT_TEST_KEY'};
 const operationId = '12345678-1234-1234-1234-123456789abc';
 
 function ledger() {

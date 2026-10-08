@@ -10,8 +10,7 @@ import {SERVICES} from './services.mjs';
 // Provider hosts come from operator configuration; every request and all storage are mocked.
 const base64 = readFileSync(new URL('./test-fixtures/source.b64', import.meta.url), 'utf8').trim();
 const env = {
-  COOKIEJAR_ENABLED: 'true', HUB_KEY: 'FAKE_TEST_CREDENTIAL',
-  WRITES_ENABLED: 'true'
+  COOKIEJAR_ENABLED: 'true', HUB_KEY: 'FAKE_TEST_CREDENTIAL'
 };
 const operationId = '12345678-1234-1234-1234-123456789abc';
 const siteId = 'example-site';
@@ -183,21 +182,6 @@ test('Cookiejar activation and credential gates fail closed before any upstream 
   }
 });
 
-test('disabled writes prevent create and deploy without affecting read-only owned-site access', async () => {
-  let calls = 0;
-  const config = {...env, WRITES_ENABLED: 'false'};
-  const fetcher = async () => {calls++; return Response.json({sites: []});};
-  for (const [name, args] of [
-    ['cookiejar_create_site', {operationId, name: 'Example'}],
-    ['cookiejar_deploy_site', await deployArgs()]
-  ]) {
-    await assert.rejects(() => extraCall(name, args, config, fetcher, readJson, ledger()));
-  }
-  assert.equal(calls, 0);
-  assert.deepEqual(await extraCall('cookiejar_owned_sites', {}, config, fetcher, readJson), {sites: []});
-  assert.equal(calls, 1);
-});
-
 test('owned sites use only fixed-origin authenticated GET and return allowlisted metadata', async () => {
   for (const shape of ['array', 'object']) {
     const fetcher = async (url, init) => {
@@ -223,7 +207,7 @@ test('operation status returns durable state and never retries an external call'
   });
   await store.claim(operationId, 'synthetic-fingerprint');
   await store.set(operationId, 'needs_reconciliation', {siteId, deployId, phase: 'starting'});
-  assert.deepEqual(await extraCall('cookiejar_operation_status', {operationId}, {...env, WRITES_ENABLED: 'false'}, fetcher, readJson, store), {
+  assert.deepEqual(await extraCall('cookiejar_operation_status', {operationId}, {...env}, fetcher, readJson, store), {
     operationId, state: 'needs_reconciliation', result: {siteId, deployId, phase: 'starting'}
   });
   assert.equal((await extraCall('cookiejar_operation_status', {operationId}, {}, fetcher, readJson, store)).state, 'needs_reconciliation');
@@ -465,7 +449,7 @@ test('worker routes owned-site reads through the helper and sanitizes returned c
   assert.equal(calls, 1);
 });
 
-test('discovery exposes 7 read-only or 11 enabled tools and no extra destructive operations', async () => {
+test('discovery exposes annotated tools without a redundant write setting', async () => {
   const handler = createHandler(() => {throw Error('Discovery must not contact upstream');});
   const request = () => new Request('https://bridge.example.invalid/mcp', {
     method: 'POST', headers: {'content-type': 'application/json'},
@@ -473,13 +457,12 @@ test('discovery exposes 7 read-only or 11 enabled tools and no extra destructive
   });
   const off = (await (await handler(request(), {})).json()).result.tools;
   const on = (await (await handler(request(), env)).json()).result.tools;
-  assert.equal(off.length, 7);
-  assert.ok(off.every(tool => tool.annotations.readOnlyHint));
-  assert.equal(on.length, 11);
-  assert.equal(on.filter(tool => tool.annotations.readOnlyHint).length, 7);
-  assert.equal(new Set(on.map(tool => tool.name)).size, 11);
+  assert.equal(off.length, 13);
+  assert.deepEqual(off,on);
+  assert.equal(on.length, 13);
+  assert.equal(on.filter(tool => tool.annotations.readOnlyHint).length, 8);
+  assert.equal(new Set(on.map(tool => tool.name)).size, 13);
   assert.ok(on.every(tool => !/(delete|rotate|admin|environment)/i.test(tool.name)));
   for (const tool of EXTRA_TOOLS) assert.ok(on.some(item => item.name === tool.name));
-  const response = await (await handler(rpc('cookiejar_create_site', {operationId, name: 'Example'}), {...env, WRITES_ENABLED: 'false'})).json();
-  assert.equal(response.error.code, -32002);
+
 });

@@ -12,10 +12,10 @@ const rpc = (name, args = {}, user = 'test-owner') => new Request('https://bridg
 test('every tool call rejects a missing or blank managed identity before dispatch', async () => {
   const handler = createHandler(() => {throw Error('must not call');});
   const request = new Request('https://bridge.example.invalid/mcp', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
-  const list = (await (await handler(request, {...env, WRITES_ENABLED:'true'})).json()).result.tools;
+  const list = (await (await handler(request, {...env})).json()).result.tools;
   for (const tool of list) {
     for (const user of [null, '', ' ', '\t']) {
-      const response = await handler(rpc(tool.name, {}, user), {...env, WRITES_ENABLED:'true'});
+      const response = await handler(rpc(tool.name, {}, user), {...env});
       assert.equal(response.status, 403, tool.name);
       assert.deepEqual((await response.json()).error, {code:-32001, message:'Authentication required'});
     }
@@ -45,21 +45,10 @@ test('connection info returns managed authentication only, independent of legacy
     assert.deepEqual(value, {authenticated:true, authentication:'sites-managed', userId:'test-owner'});
   }
 });
-test('write tools are hidden and refused while writes disabled', async () => {
-  const handler = createHandler(() => {throw Error('must not call');});
-  const request = new Request('https://bridge.example.invalid/mcp', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
-  const list = (await (await handler(request, env)).json()).result.tools;
-  assert.ok(list.every(t => t.annotations.readOnlyHint));
-  const operationId = '12345678-1234-1234-1234-123456789abc';
-  for (const [name, args] of [
-    ['bridge_api_write', {serviceId:'cookiejar', method:'POST', path:'/sites', operationId}],
-    ['bridge_api_upload', {serviceId:'cookiejar', siteId:'site', deployId:'deploy', uploadUrl:'https://example.invalid/source.zip', bodyBase64:'', sha256:'0'.repeat(64), operationId}],
-    ['cookiejar_create_site', {name:'Synthetic site', operationId}],
-    ['cookiejar_deploy_site', {siteId:'site', sourceZipBase64:'', sourceSha256:'0'.repeat(64), kind:'static', operationId}]
-  ]) {
-    const response = await handler(rpc(name, args), env);
-    assert.equal((await response.json()).error.code, -32002, name);
-  }
+test('write tools remain discoverable without an environment setting and retain write annotations', async () => {
+ const h=createHandler(()=>{throw Error('No network');});const request=new Request('https://bridge.example.invalid/mcp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
+ const list=(await(await h(request,{})).json()).result.tools;
+ for(const name of ['bridge_api_write','bridge_api_upload','cookiejar_create_site','cookiejar_deploy_site']){const tool=list.find(t=>t.name===name);assert.equal(tool.annotations.readOnlyHint,false);}
 });
 test('managed authentication does not bypass disabled services or missing credentials', async () => {
   let calls = 0;
@@ -116,7 +105,7 @@ test('upload sends no API credential and duplicate ID never repeats the PUT', as
   const bytes = new TextEncoder().encode('synthetic upload');
   const args = {serviceId:'cookiejar',siteId:'site',deployId:'deploy',uploadUrl:`https://${SERVICES.cookiejar.uploadHost}/site/deploys/deploy/source.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=FAKE`,bodyBase64:btoa('synthetic upload'),sha256:await digest(bytes),operationId:'12345678-1234-1234-1234-123456789abc'};
   let calls = 0; const fetcher = async (_, init) => {calls++; assert.equal(new Headers(init.headers).get('authorization'),null); assert.equal(init.redirect,'manual'); return new Response(null,{status:204});};
-  const config = {...env,WRITES_ENABLED:'true'};
+  const config = {...env};
   assert.equal((await genericCall('bridge_api_upload',args,config,fetcher,ledger)).state,'completed');
   assert.equal((await genericCall('bridge_api_upload',args,config,fetcher,ledger)).replayed,true);
   assert.equal(calls,1);

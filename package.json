@@ -1,12 +1,15 @@
 {
-  "name": "dot-api-shim",
-  "version": "0.2.0",
+  "name": "dot-api-bridge",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "engines": {"node": ">=22"},
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "test": "node --test",
-    "check": "node --check worker.mjs && node --check generic.mjs && node --check helpers.mjs && node --check writes.mjs && node --check services.example.mjs",
-    "build": "node build.mjs"
+    "check": "node --check worker.mjs && node --check generic.mjs && node --check helpers.mjs && node --check writes.mjs && node --check services.example.mjs && node --check connections.mjs && node --check ui/client.js",
+    "build": "node build.mjs",
+    "pretest": "node ui/build.mjs"
   }
 }

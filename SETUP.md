@@ -1,98 +1,74 @@
-# Private Sites deployment
+# Set up a private bridge
 
-Use this private hosted MCP bridge when your assistant setup lacks a supported connection to the API you need. This repository supplies source; each owner still needs their own owner-private deployment, credentials, and Sites-managed plugin connection. No manual owner-ID setting is required. Do not copy another person's deployment manifest, identifiers, or secrets.
+Give your dot the [build instructions](agent-handoff.md) and tell it the service or task you want to connect. The agent handles implementation and deployment. You review the access, connect the Site's plugin, and enter API keys directly in the masked field on your private bridge page.
 
-Cookiejar provider configuration is included as a concrete example. Cookiejar is currently waitlist-stage; the steps below assume the owner already has authorized API access and the required credential. The bridge does not provide that access. If access is not available, complete local checks or review an authorized alternative API adapter; do not promise a live Cookiejar setup. The optional `example_rpc` configuration is fictional and should stay disabled.
+Saved connections contain the API destination, authentication format, and key. They require no environment-variable settings. Native `DB` provisioning and Sites-managed authentication are still required. There is no manual owner-ID gate or global write switch.
 
-Use the current [Sites documentation](https://learn.chatgpt.com/docs/sites) and the Sites tools available in your environment. Also see [plugin setup](https://learn.chatgpt.com/docs/plugins). UI labels and deployment tooling can change; inspect the current tool schema rather than inventing a command.
+Cookiejar is the included real example and is currently waitlist-stage. Its live setup assumes existing authorized API access. If access is unavailable, the agent should say so and continue useful source checks or preparation. The optional `example_rpc` service is fictional; leave it inactive unless developing a separately reviewed adapter.
 
-## 1. Agree on the requested outcome
+## First deployment for a new owner
 
-Ask only for decisions or approvals that are missing. A documentation request alone does not authorize a running deployment. A request for a read-only bridge does not authorize write access or a live publish.
+The agent should read its current Sites building, hosting, and MCP instructions and use the supported native tools. This is a source template, not a verified one-click directory installer. Create a new private Site only when the owner does not already have a bridge for this task.
 
-Suggested owner prompt when scope is missing:
+1. **Get the source.** Use [rkz211/dot-api-bridge](https://github.com/rkz211/dot-api-bridge), then read [SECURITY.md](SECURITY.md) and [agent-handoff.md](agent-handoff.md).
 
-> If you already have Cookiejar API access, should I build and deploy an owner-private bridge for it, initially read-only? I'll prepare the code and configuration; you'll enter your Cookiejar key in Sites Settings and connect its plugin.
+   ```sh
+   git clone https://github.com/rkz211/dot-api-bridge.git
+   cd dot-api-bridge
+   ```
 
-For a requested full publishing bridge, finish the authorized implementation while keeping runtime writes off until access approval and checks are complete. Explain any missing functionality precisely; don't leave it as “add publishing later.”
+2. **Create an owner-private Site.** Register it through the native Sites workflow with the MCP capability. The server supplies the setup page at `/` and stateless HTTP MCP at `POST /mcp`. Use [hosting.example.json](hosting.example.json) as a logical configuration example and create `.openai/hosting.json` with the project identity returned for this owner. Do not copy another deployment's manifest or identifiers. Keep the platform's owner-only access policy and managed authentication enabled.
 
-## 2. Prepare the implementation
+3. **Provision native storage.** Add a native D1 database binding named `DB` through the supported Sites workflow and declare the logical binding in the hosting manifest. A text setting called `DB` is not a database. Include [db/schema.ts](db/schema.ts) and the committed [drizzle/](drizzle/) migration history in the deployment source. Both `bridge_operations` and `bridge_connections` are required. Apply the ordered migrations through the normal Sites workflow before the new Worker serves requests. [schema.sql](schema.sql) is an alternative fresh-database schema for a supported manual provisioning path; do not apply it and then replay the same table-creation migrations. Use the migration-managed path for normal Sites deployment.
 
-Use the canonical [dot API bridge repository](https://github.com/rkz211/dot-api-bridge). To get the source locally:
+4. **Build and check the source.** Use Node.js 22.13+ for the SQLite-backed tests; Node.js 24 is recommended. Run `npm test`, `npm run check`, and `npm run build`. Check the local setup UI with synthetic data and fake keys. The build produces `dist/server/index.js` plus its runtime modules. Package that output and the migration inputs using the current Sites workflow. Never enter a real key merely to test the UI.
 
-```sh
-git clone https://github.com/rkz211/dot-api-bridge.git
-cd dot-api-bridge
+5. **Deploy privately.** Save and deploy to the owner-private Site, wait for a successful deployment result, and retain the returned Site/version details privately. Confirm migration success and owner-only access. Missing storage must be repaired before key entry; do not work around it by exposing a public Worker or adding a custom credential service.
+
+6. **Connect the Site's own plugin.** Use the App/private plugin provisioned for this Site. When the current Sites tool exposes `get_site`, request `include_mcp_connection: true` and use the returned plugin ID with the native install/connect flow. Never guess an ID or create a second App. The owner completes the managed sign-in and permissions prompts. Installation alone is not a verified connection.
+
+7. **Verify managed authentication.** Call `bridge_connection_info({})` through the connected plugin. Require `authenticated: true` and `authentication: "sites-managed"`; keep the returned caller ID private. Verify owner-only Site access separately. Call `bridge_connection_status({})` to check storage and setup readiness. Confirm unsigned data-bearing requests fail; the public health response is not an authentication test.
+
+This deploys the bridge itself. It does not prove upstream account access or authorize publishing through a connected API. No external LLM API or LLM API key is required. Hosting and connected-service charges depend on the providers.
+
+## Connect a service in the private page
+
+1. Open the verified private Site link while signed in.
+2. Choose a prepared service, or enter a service name, website, or agent-instructions link. Enter your goal when asking your dot for help. Do not enter a key in the search box.
+3. If the service is not prepared, copy the page's request to your dot. The agent reads official documentation and uses `bridge_prepare_connection` to save the non-secret API details. Preparation makes no provider request and does not grant access.
+4. Follow the returned private setup link. Review the service, access description, key-help instructions, and exact API destination.
+5. Enter the key yourself in the masked key field. Confirm the destination, then choose **Save & test**. Keep the key out of chat, source code, files, URLs, and model tool arguments.
+6. If a verified GET/HEAD probe is configured, inspect its result. Without one, the page reports that the key is saved but not automatically verified. A failed test leaves an existing working saved key unchanged. If a request's outcome is uncertain, refresh before trying again.
+7. Copy the ready connection's handoff and tell your dot the task you want completed. The agent checks safe readiness and makes an authorized request to verify upstream access.
+
+Keys are stored server-side in the Site's native D1 database, with platform-managed encryption at rest. Authorized database administrators can read stored values. The page does not save keys in browser storage or show them again after saving. This is ordinary protected application storage, not a separate inaccessible vault.
+
+The included Cookiejar setup asks for an account sites key and checks `GET /sites`. A per-site token does not support that account-level check. Explain the scope before entry: the account key can read and update the sites it owns. Do not request an admin token. If narrower site-scoped access is required, prepare and verify that specific flow before key entry. Creating new credentials or expanding persistent access still requires the applicable approval.
+
+## Verify the first request
+
+Use `bridge_connection_status({})` or `bridge_services({})` for safe setup metadata. Key presence is not credential validity. The agent should read the provider's contract, preview the intended request if helpful, then inspect the actual upstream status and body.
+
+For an authorized Cookiejar account connection, pass these arguments to `bridge_api_read`:
+
+```json
+{"serviceId":"cookiejar","method":"GET","path":"/sites"}
 ```
 
-For a dot or another agent working from a link, share the [agent guide](https://github.com/rkz211/dot-api-bridge/blob/main/agent-handoff.md) together with the requested scope.
+For a separately prepared and authorized site-scoped flow, `/me` with a verified `siteId` may be appropriate instead. Never substitute a Sites project ID for an upstream site ID. A successful MCP envelope or `/health` response is not evidence of an authenticated provider read.
 
-The agent should:
+For another prepared service, use its returned connection ID and a verified documented relative path. No business-endpoint mapping is needed. GET/HEAD use `bridge_api_read`; other supported methods use `bridge_api_write` with a stable operation ID and the relevant action approval. See [generic requests](agent-handoff.md#generic-requests).
 
-1. Read [README.md](README.md), [SECURITY.md](SECURITY.md), and [agent-handoff.md](agent-handoff.md), then inspect the source.
-2. For an owner with Cookiejar access, use the included registry: its fixed API origin and source-upload host are already configured. Verify provider contract changes before changing them; do not replace the API origin with the portal hostname. Leave the fictional `example_rpc` entry disabled. Adapting it to a real service requires a reviewed contract, server-side policy, synthetic tests, and the owner's approval for the required access.
-3. Keep `HUB_KEY` as an environment-variable name in source, never a secret value. Leave optional services inactive.
-4. Prepare an owner-private Sites project with the MCP capability and stateless `POST /mcp` endpoint. The repository deliberately omits a site-specific `.openai/hosting.json`; create it through the supported Sites workflow with this owner's returned project ID. Do not copy someone else's manifest.
-5. Provision a durable SQL binding named `DB` and apply [schema.sql](schema.sql) before writes. Merely adding a text setting named `DB` does not create a database. Keep `WRITES_ENABLED` unset or `false` initially.
-6. Run `npm test`, `npm run check`, and `npm run build` with Node.js 22+. The build writes `dist/server/index.js` and its runtime modules. Package that output using the current Sites workflow; local build success is not deployment success.
+## Update an existing bridge
 
-Keep runtime values out of the hosting manifest. Use platform-managed authentication and preserve the Site's owner-only access control; never expose this worker directly where callers can forge identity headers. Broadening access requires a separately reviewed application authorization policy before sharing, because credentials and operation records are not isolated by caller.
+Reuse its owner-private Site, project identity, native plugin, database binding, and immutable migration history. Preserve saved connections. Apply only the new migrations required by the update; do not reset a database or reapply an already recorded migration. For an older deployment whose tables were created outside the migration history, inspect the actual schema and reconcile that history through the supported workflow before publishing. Do not blindly replay a `CREATE TABLE` migration against an existing table.
 
-## 3. Publish the private bridge
+Run the checks against the final source, deploy the approved update to the same private Site, then verify authentication, safe connection status, and authorized reads. Keep private IDs, deployment URLs, configuration, and credentials out of public exports.
 
-Use the owner's existing Site if continuing setup, or the new Site created for this task. Save and deploy through Sites, preserve owner-only access, and verify deployment status reaches success. Retain the returned version/project information privately so configuration changes update the same Site.
-
-This publishes the bridge itself. It does not publish a Cookiejar website, install the plugin, or prove upstream account access.
-
-## 4. Let the owner enter the secret
-
-Provide the verified Site link/name and this instruction:
-
-> Open Sites, find this bridge, then choose More actions → Settings. Add your Cookiejar key as the hosted secret HUB_KEY. Enter it there yourself; don't paste it into chat, a file, source code, or a custom bridge page. Tell me when it's saved without sending the value.
-
-Use [Sites in ChatGPT](https://chatgpt.com/sites). Explain the credential's scope before setup: an account key can reach the sites it owns; a site token has a narrower scope and does not support account-level create/list operations. Use only the credential type needed and approved. Do not ask for an admin token.
-
-Configure `COOKIEJAR_ENABLED=true` only after the registry is reviewed. Redeploy the approved saved version after runtime values change, as required by the [Sites runtime settings instructions](https://learn.chatgpt.com/docs/sites#configure-runtime-environment-values).
-
-## 5. Connect the Site's own plugin
-
-Use the App/private plugin provisioned for this Site, including on updates. Do not build a second App or configure local stdio MCP as a workaround.
-
-When the current Sites connector exposes `get_site`, request `include_mcp_connection: true` and use the returned plugin ID to present the native plugin installation flow. Do not guess an ID. If a connection UI cannot be presented, direct the owner to Plugins → Personal → Created by you, open this Site's plugin, and choose Install or Connect as needed.
-
-Suggested owner prompt:
-
-> Install/connect this bridge's plugin and complete its sign-in and permissions prompts with your own account. I'll then verify the authenticated connection.
-
-Verify the connection with `bridge_connection_info({})`. Installation alone is not a successful authenticated tool call.
-
-## 6. Verify Sites-managed authentication
-
-Call `bridge_connection_info({})` through the connected Site plugin. Require `authenticated: true` and `authentication: "sites-managed"`. Its `userId` comes from the trusted `oai-authenticated-user-id` header supplied by Sites; keep that identifier private.
-
-Verify that the Site still has owner-only access in the native Sites controls. The worker requires a nonblank managed identity on every tool call and relies on that platform access control for authorization. A successful connection-info response proves managed authentication only; it does not independently inspect the Site's sharing settings or prove upstream credential validity.
-
-Do not add or copy an `OWNER_USER_ID` setting. Legacy values are ignored and can remain in place. There is no extra identity-binding step or setting-related redeploy. Missing or blank managed identity still fails with `Authentication required` / HTTP 403.
-
-## 7. Verify authenticated reads
-
-1. Call `bridge_services({})`: the selected service must be enabled and its credential configured. This reports presence, not credential validity.
-2. For an approved Cookiejar account key, call `bridge_api_read` with `{"serviceId":"cookiejar","method":"GET","path":"/sites"}`. For a known authorized site, use `{"serviceId":"cookiejar","method":"GET","path":"/me","siteId":"REPLACE_WITH_VERIFIED_SITE_ID"}`.
-3. Check the actual upstream status, `ok`, and response content. Neither a successful MCP envelope nor `/health` proves an authenticated upstream read.
-4. Report the tested service and operation without exposing private records, source download links, credentials, or owner IDs in public logs.
-
-## 8. Enable only the approved write capability
-
-Before changing persistent access, explain its breadth and obtain the required approval. The current flag enables both generic write and upload tools for enabled services; it is not an endpoint-by-endpoint permission system. Implement narrower server-side policy first if that is the owner's requirement.
-
-Suggested approval prompt:
-
-> May I enable this private bridge's write and source-upload capability for Cookiejar? The current code permits generic API mutations beyond publishing. I'll still require the applicable approval for each live action. If you want publishing-only access enforced by the server, I'll add that restriction before enabling writes.
-
-After approval, verify `DB` and the schema, set `WRITES_ENABLED=true`, redeploy, and refresh tool discovery. The dedicated create/deploy helpers are included in this version; a flag cannot create absent code in an older deployment. Use the [publishing checklist](agent-handoff.md#cookiejar-publishing-checklist) to identify remaining implementation work and obtain approval for a specific live test.
+Existing hosted-secret connections are an optional compatibility fallback, not a setup requirement. Their keys are not automatically copied to D1. An explicit key save in the page takes precedence for the same destination. Disconnect clears the saved value and disables fallback for that connection; it does not revoke the provider's key. Legacy `OWNER_USER_ID` values are ignored, and no `WRITES_ENABLED` setting is needed.
 
 ## Completion report
 
-Report each stage independently: source checks; owner-private bridge deployment and access control; secret presence; plugin connection; managed authentication; authenticated upstream reads; write tools exposed; any authorized create, upload, deploy, or domain operation. Mark untested stages as untested. Mock tests never prove a live publish.
+Report source checks, private deployment/access control, database readiness, plugin connection, managed authentication, key setup, and authenticated provider reads separately. Name exactly what was tested. Any create, upload, deploy, or domain change is a separate live action requiring its own applicable approval and result verification. Local tests and visible tools do not prove a live publish.
 
-No LLM API key is required by this bridge. Provider hosting and API charges may apply.
+The agent should return the verified private setup link and the smallest remaining owner action. Do not hand unfinished authorized implementation back to the owner as a vague instruction to build an adapter.

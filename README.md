@@ -1,80 +1,76 @@
 # dot API bridge
 
-An assistant setup may lack a supported tool or connection for a particular external API. This private hosted MCP bridge adds that connection for a dot or another compatible MCP client, using server-held credentials.
+A private setup page and MCP connection for APIs your dot does not already have a supported tool for.
 
-The client chooses an approved service and request; the server fixes the upstream origin, injects the credential, bounds responses, and records write attempts durably.
+![Jailbreak your dot with a private API bridge](docs/assets/jailbreak-dot-api-bridge.png)
 
-This is source you deploy into your own owner-private Site. Sites-managed authentication and the Site's owner-only access control authorize callers. It is not a shared public API or an automatically configured integration.
+[Download the illustrated guide as a PDF](docs/assets/jailbreak-dot-api-bridge.pdf)
 
-Cookiejar is the included concrete example. It is currently waitlist-stage, so its examples require existing authorized access and a valid credential; this repository does not grant access. A separate synthetic JSON-action API example shows how the generic registry works without depending on another real service.
+Start with what you want to do, a service name, its website, or a link to its agent instructions. Your dot reads the official documentation and prepares the connection. You review the destination and enter your API key directly in the private page. Then tell your dot what to do.
+
+The page does not run an LLM or discover services on its own. Unknown services produce a copyable request for your dot. This bridge needs no external LLM API or LLM API key. Hosting and connected-service charges depend on your providers.
 
 ## Start here
 
-- [Source repository](https://github.com/rkz211/dot-api-bridge): canonical repository and clone URL
-- [Installation](SETUP.md): step-by-step setup, owner prompts, and verification gates
-- [Instructions for your dot](agent-handoff.md): implementation checklist, Cookiejar publishing sequence, and troubleshooting
-- [Security model and limits](SECURITY.md): trust boundary, route policy, opaque payloads, and uncertain writes
-- [Small publishing sample](examples/README.md): reproducible source for an authorized live test
+- **Give your dot the [build instructions](agent-handoff.md)** and ask it to build your private bridge. The guide covers creation, deployment, storage, plugin connection, and verification.
+- [Setup guide](SETUP.md): what happens during installation and how to connect a service
+- [Security model](SECURITY.md): credentials, access control, request guards, and limitations
+- [Cookiejar publishing sample](examples/README.md): small source archive for an authorized test
+- [Source repository](https://github.com/rkz211/dot-api-bridge): canonical source and clone URL
 
-The bridge does not call an LLM API or need an LLM API key. Hosting and upstream API costs depend on your providers.
+This repository is source for your own owner-private Site. It is not a shared public API or a verified one-click directory installation.
 
-## What is already implemented?
+Cookiejar is the included real example and is currently waitlist-stage. Its live examples require existing authorized API access; this repository does not grant access. The optional `example_rpc` service is a fictional RPC example demonstrating adapter mechanics, not another available provider.
 
-The public source already exposes these MCP tools in [worker.mjs](worker.mjs), [generic.mjs](generic.mjs), and [writes.mjs](writes.mjs):
+## Guided connection setup
 
-| Tool | Implemented behavior |
+1. Choose a prepared service, or enter a service name, website, or agent-instructions link.
+2. For a new service, give your dot the page's copyable request. It checks official documentation and calls `bridge_prepare_connection` with non-secret details.
+3. Review what access the key grants, the verified key-help instructions, and the API destination.
+4. Enter the key in the masked private key box and save it. A verified read-only check runs when one is configured.
+5. Copy the ready connection's handoff and tell your dot the action you want.
+
+You can test, replace, or disconnect a key from the same page. A connection without a configured check is shown as saved but not automatically verified. A successful check is not permission for future actions.
+
+The saved API destination, authentication format, and key are authoritative. No environment-variable settings are required for this flow. The Site still needs its native `DB` binding, database migrations, private access policy, and managed plugin connection. There is no manual owner-ID gate or global write-enable switch.
+
+## Available tools
+
+| Tool | Purpose |
 | --- | --- |
-| `bridge_connection_info` | Returns Sites-managed authentication status and the authenticated caller ID, never credentials |
-| `bridge_services` | Reports service activation and whether a credential is configured |
-| `bridge_api_preview` | Validates a request without contacting the API |
-| `bridge_api_read` | Fixed-origin GET/HEAD, plus allowlisted read-only JSON actions for configured RPC services |
-| `bridge_api_write` | Fixed-origin POST/PUT/PATCH/DELETE with a durable operation ledger |
-| `bridge_api_upload` | Cookiejar source ZIP PUT to a validated signed URL, with matching SHA-256 |
-| `bridge_operation_status` | Reads the stored outcome without repeating a mutation |
-| `cookiejar_owned_sites` | Lists owned-site metadata with credentials excluded |
-| `cookiejar_create_site` | Creates one requested named site with durable duplicate protection; strips the returned token |
-| `cookiejar_deploy_site` | Checks ownership and ZIP/hash, prepares a deploy, uploads to its signed source URL, and starts the build |
-| `cookiejar_operation_status` | Reads the dedicated create/deploy operation outcome |
+| `bridge_connection_info` | Verify Sites-managed authentication; includes the private caller ID |
+| `bridge_prepare_connection` | Save non-secret API destination, authentication format, and setup guidance; never accepts a key |
+| `bridge_connection_status` | Return safe connection metadata, readiness, and documentation links without keys or key fragments |
+| `bridge_services` | Report available services and credential presence, not credential validity |
+| `bridge_api_preview` | Validate a request without contacting the provider |
+| `bridge_api_read` | Make GET/HEAD requests; configured bespoke RPC adapters can classify specific POST actions as reads |
+| `bridge_api_write` | Make authorized POST/PUT/PATCH/DELETE requests with durable operation IDs |
+| `bridge_api_upload` | Upload a bounded Cookiejar source ZIP to its validated signed destination |
+| `bridge_operation_status` | Inspect a recorded operation without repeating a mutation |
+| `cookiejar_owned_sites` | Read owned-site metadata with credentials excluded |
+| `cookiejar_create_site` | Create an approved site with durable duplicate protection and returned-token redaction |
+| `cookiejar_deploy_site` | Check ownership and source ZIP/hash, prepare a deployment, upload, and start its build |
+| `cookiejar_operation_status` | Inspect the dedicated create/deploy operation outcome |
 
-Write and upload tools are hidden from discovery while `WRITES_ENABLED` is off. They are present in the code. Turning the flag on does not implement missing routes, provision storage, grant user consent, or prove a deployment works.
+Generic connections do not need endpoint-by-endpoint business mappings. The agent supplies a relative path, method, optional query, and a bounded JSON/text/base64 body within the saved API base URL. Ordinary generic GET/HEAD requests use the read tool; other supported methods use the conservative write tool. The available tool is not authorization: user approval requirements still apply to each action.
 
-For Cookiejar publishing, prefer the dedicated create/deploy helpers. They provide a bounded source-upload/build-start flow with ZIP checks and ownership validation. The caller must still poll the build and verify the live result. Generic tools remain available for reviewed requests, including domain API steps when specifically authorized. See the [publishing checklist and actual gaps](agent-handoff.md#cookiejar-publishing-checklist).
+For Cookiejar publishing, prefer the [dedicated flow](agent-handoff.md#cookiejar-publishing). Its source ZIP limit is 512 KiB. Starting a build does not establish that a site is live; the caller must follow status and verify the result.
 
-The dedicated helper accepts source ZIPs up to 512 KiB; it does not implement streaming or arbitrary file uploads. See the [ready-to-use publishing flow](agent-handoff.md#preferred-dedicated-publishing-flow).
+## Storage and trust
 
-## What the agent does and what the owner does
+Keep the Site owner-private and retain Sites-managed authentication. The platform's owner-only access policy authorizes the managed caller. This worker does not isolate multiple owners' keys or operation records and must not be exposed directly where callers can forge identity headers.
 
-The agent inspects the source and current contracts, completes authorized implementation, runs checks, prepares and publishes the authorized private bridge, presents its plugin connection, and verifies authenticated reads. It should not hand unfinished coding back to the owner as a setup instruction.
+Keys entered in the page stay server-side in the Site's built-in D1 database. Native storage is encrypted at rest by the platform, but authorized database administrators can read stored key values. This is not an inaccessible vault. Keys must never be pasted into chat, code, tool arguments, URLs, or browser storage.
 
-The owner approves the requested access, enters their own upstream credential in native Sites Settings, and completes the plugin's connection/consent flow. The agent verifies Sites-managed authentication with `bridge_connection_info`; no manual owner-ID configuration is needed.
+Each key is bound to a normalized HTTPS destination and authentication format. A different destination or authentication format requires a new connection ID and a newly entered key. Request-time callers cannot override the destination or authentication header. Redirects are refused.
 
-Keep these milestones separate: **code ready → owner-private bridge deployed → secret configured → plugin connected → managed authentication verified → authenticated read verified → write capability approved/configured → specific live action verified**. Publishing the bridge is separate from publishing a website through Cookiejar.
+Disconnect clears the saved key and suppresses any legacy hosted-secret fallback for that connection. It does not revoke the provider's key or stop requests already in flight. Existing hosted-secret connections remain an optional compatibility path; owners do not need to migrate or re-enter their keys to keep those connections working.
 
-For Cookiejar-only use, leave the synthetic `example_rpc` service disabled. It is an illustration, not a second account to set up.
+Destination validation, credential-route checks, response redaction, and durable write tracking reduce risk. They are not a complete service permission model or a security certification. Read the [limits and operator responsibilities](SECURITY.md) before connecting a service.
 
-## Design
+## Development and verification
 
-- A server-owned service registry selects a fixed HTTPS origin and credential environment variable.
-- Every tool call requires a nonblank Sites-managed authenticated identity; the owner-private Site's access control limits who can connect.
-- Request previews perform no network call and do not grant authorization.
-- Read and write tools are distinct. JSON action APIs must classify actions by behavior, not HTTP verb alone.
-- Writes are off until explicitly enabled and require durable storage and a stable operation identifier.
-- An uncertain write is not automatically retried. Inspect the upstream state before deciding what to do next.
-- The implementation does not expose a credential entry form or arbitrary caller-supplied destination URL.
-
-## Important limits
-
-This is a prototype, not a security certification. A fixed origin and blocked-route list are not a full service-specific permission model. Arbitrary text and binary payloads cannot be proven free of secrets. Review an API's exact contract and the user's permissions before enabling it. Keep the deployed Site owner-private. Broadening its access control requires a separately reviewed application authorization policy before sharing; this worker does not isolate multiple users' credentials or operation records.
-
-The tests use synthetic data, fake credentials, and mocked upstream calls. They do not establish that your live deployment, account access, or write operations work. Cookiejar provider configuration is included. Owner-private Site access, credentials, runtime flags, and the Site-specific hosting manifest still require native setup.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
-
-## Local checks
-
-Requires Node.js 22 or later. No package installation is needed.
+Use Node.js 22.13 or later for `node:sqlite`; Node.js 24 is recommended. Runtime execution has no external package dependencies.
 
 ```sh
 npm test
@@ -82,31 +78,12 @@ npm run check
 npm run build
 ```
 
-The build places the worker entry point at `dist/server/index.js`. Provision a D1-compatible `DB` binding and apply `schema.sql` for durable writes. Runtime imports are included beside the entry point.
+The test workflow generates the UI before running the tests. The build places the Worker and runtime modules in `dist/server/`. [SETUP.md](SETUP.md#first-deployment-for-a-new-owner) covers native `DB` provisioning and migrations for both connection storage and the operation ledger. Preserve existing migration history when updating a Site.
 
-## Configuration
+Automated tests use synthetic data, fake keys, mocked provider requests, and local SQLite. The dependency-free UI checks in `ui/dom-test.mjs` exercise local behavior; they do not establish a production login, database, or provider connection. Authenticated reads have separately been verified on a private runtime. That does not verify a fresh deployment of this public source, another owner's account, or live publishing. Report local checks and live results separately.
 
-The default registry in `services.example.mjs`, re-exported by `services.mjs`, contains the Cookiejar API origin and source-upload host. No Cookiejar adapter editing is required for the included contract. These are provider infrastructure addresses, not credentials. Keep credential environment-variable names in source and enter their values only in native runtime Settings.
+## License
 
-Native runtime settings for Cookiejar:
-
-- `HUB_KEY`: Cookiejar API secret
-- `COOKIEJAR_ENABLED=true`: activate the reviewed Cookiejar service configuration
-- `WRITES_ENABLED=true`: enable write tools only after approved access expansion and durable storage setup
-- `DB`: platform-provisioned durable SQL binding, not a text secret
-
-`OWNER_USER_ID` is no longer used. A legacy value can remain without blocking an authenticated connection. Authentication comes from Sites, and authorization relies on the Site remaining owner-private.
-
-Both example services are inactive unless their activation flag is set. Writes also require their separate flag. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Other upload contracts need a separately reviewed flow.
-
-### Synthetic RPC example
-
-`example_rpc` is a fictional records API with `read_record` / `list_records` read actions and `write_record` / `delete_record` write actions. Its `X-Example-Key` authentication header and action names are illustrative, not a verified provider contract. Tests mock every request to `https://records.example.invalid`; there is no live service at that address.
-
-- `EXAMPLE_RPC_API_URL`: server-configured HTTPS origin with no credentials, path, query, or fragment
-- `EXAMPLE_RPC_KEY`: example service credential, entered only in native secret storage
-- `EXAMPLE_RPC_ENABLED=true`: activation flag, left unset for normal Cookiejar setup
-
-Do not activate the fictional service as a live integration. To adapt it to a real API, review and update the registry's origin, authentication, action classification, route restrictions, and tests against that API's actual contract; obtain the required access approval before provisioning credentials or enabling it. The generic RPC machinery supports that extension without adding a new tool handler. See [the agent guide](agent-handoff.md#synthetic-rpc-example).
+MIT. See [LICENSE](LICENSE).
 
 The display name and repository are **dot API bridge** and [rkz211/dot-api-bridge](https://github.com/rkz211/dot-api-bridge). Package, tool, and sample verification identifiers retain their existing names for compatibility.

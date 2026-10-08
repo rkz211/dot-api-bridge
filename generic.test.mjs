@@ -1,6 +1,6 @@
 import {SERVICES} from './services.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {genericCall,prepare,clean,decodeBody} from './generic.mjs';import {createHandler} from './worker.mjs';
-const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',WRITES_ENABLED:'true',EXAMPLE_RPC_ENABLED:'true',EXAMPLE_RPC_API_URL:'https://records.example.invalid',EXAMPLE_RPC_KEY:'DUMMY_EXAMPLE_RPC_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
+const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',EXAMPLE_RPC_ENABLED:'true',EXAMPLE_RPC_API_URL:'https://records.example.invalid',EXAMPLE_RPC_KEY:'DUMMY_EXAMPLE_RPC_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
 function ledger(){const rows=new Map();return {rows,async get(k){return rows.get(k)},async claim(k,f){if(rows.has(k))return false;rows.set(k,{fingerprint:f,state:'in_progress'});return true;},async set(k,s,r){Object.assign(rows.get(k),{state:s,result:JSON.stringify(r)});}}}
 test('generic GET/HEAD uses fixed service auth and allows only safe headers',async()=>{for(const method of ['GET','HEAD']){const r=await genericCall('bridge_api_read',{...read,method,headers:{Accept:'application/json'}},env,async(u,o)=>{assert.equal(u,SERVICES.cookiejar.baseUrl+'/me');assert.equal(o.headers.get('Authorization'),'Bearer '+env.HUB_KEY);assert.equal(o.headers.get('X-Site'),'example-site');assert.equal(o.redirect,'manual');return Response.json({ok:true});});assert.equal(r.status,200);}});
 test('SSRF/traversal/origin/query/header injection and credential routes rejected',()=>{for(const path of ['https://evil.invalid','//evil.invalid','/../key','/%2e%2e/key','/%252e/key','/a\\b','/x?target=evil','/x#evil','/key','/env','/sites/x/rotate','/admin/sites','/v1/auth','/sites/x/env'])assert.throws(()=>prepare({...read,path},env));for(const header of ['Authorization','X-Site','Host','Cookie','Proxy-Authorization','X-Forwarded-Host'])assert.throws(()=>prepare({...read,headers:{[header]:'bad'}},env));assert.throws(()=>prepare({...read,query:{token:'secret'}},env));});
@@ -19,7 +19,7 @@ test('synthetic RPC rejects unknown actions, method/path/query overrides, and mi
  const settings={...env,EXAMPLE_RPC_KEY:undefined};
  await assert.rejects(()=>genericCall('bridge_api_read',args,settings,()=>{throw Error('must not call')}),/credential not configured/);
 });
-test('synthetic RPC writes retain flag gating, credential isolation, redaction, and durable replay protection',async()=>{
+test('synthetic RPC writes retain credential isolation, redaction, and durable replay protection',async()=>{
  const args={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'write_record',recordId:'synthetic-record',value:'approved'},operationId:id};
  let calls=0;const l=ledger();
  const fetcher=async(url,options)=>{
@@ -27,8 +27,7 @@ test('synthetic RPC writes retain flag gating, credential isolation, redaction, 
   assert.equal(options.redirect,'manual');assert.equal(JSON.parse(options.body).action,'write_record');
   return Response.json({ok:true,message:env.EXAMPLE_RPC_KEY,token:'new synthetic credential'});
  };
- await assert.rejects(()=>genericCall('bridge_api_write',args,{...env,WRITES_ENABLED:'false'},fetcher,l),/Writes are disabled/);
- assert.equal(calls,0);
+
  const result=await genericCall('bridge_api_write',args,env,fetcher,l);
  assert.equal(result.state,'completed');assert.equal(result.result.response.bodyJson.message,'[REDACTED]');assert.equal(result.result.response.bodyJson.token,'[REDACTED]');
  assert.equal((await genericCall('bridge_api_write',args,env,fetcher,l)).replayed,true);
@@ -62,7 +61,7 @@ test('session-shaped input fields rejected and response fields redacted before p
 });
 
  test('optional synthetic RPC endpoint is inactive unless a safe server setting is present',async()=>{
- for(const url of [undefined,'http://bad.invalid','https://user:pass@bad.invalid','https://bad.invalid/path','https://bad.invalid/?token=x']){
+ for(const url of [undefined,'http://bad.invalid','https://user:pass@bad.invalid','https://bad.invalid:8443','https://bad.invalid/?token=x']){
  const settings={...env,EXAMPLE_RPC_API_URL:url};
  const status=await genericCall('bridge_services',{},settings,()=>{throw Error('No network');});
  assert.equal(status.services.find(s=>s.serviceId==='example_rpc').enabled,false);
