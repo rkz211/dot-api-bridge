@@ -2,6 +2,10 @@
 
 Use this guide with [SETUP.md](SETUP.md). The repository is implementation material, not permission to change an account, enable persistent access, or publish a website. Work within the owner's request and the current platform approval rules.
 
+Start with the actual connection gap: check whether this assistant setup already has a supported tool for the requested API. When it does not, this private hosted MCP bridge can supply a reviewed connection. Do not make universal claims about ChatGPT or dot being unable to call external APIs.
+
+Cookiejar is the included concrete example and is currently waitlist-stage. Its live setup and publishing instructions apply only to owners who already have authorized API access. Confirm that prerequisite without asking for a credential in chat. The fictional RPC example below demonstrates extension mechanics; it is not another available provider.
+
 ## Take ownership of implementation
 
 Inspect [worker.mjs](worker.mjs), [generic.mjs](generic.mjs), [helpers.mjs](helpers.mjs), [writes.mjs](writes.mjs), and the service registry before saying a capability is missing. Complete authorized code and configuration work yourself. Ask the owner for consent, native secret entry, connection, or a genuinely missing decision; don't ask them to implement the remaining adapter.
@@ -80,7 +84,7 @@ If a hostname is already attached elsewhere, do not remove or move it automatica
 These are current implementation limits, not reasons to abandon an authorized task or claim all connectors are unavailable:
 
 - Generic bodies and responses are bounded at 512 KiB; the MCP request envelope has a 1 MiB cap. The signed-source upload is base64-in-JSON, with a 512 KiB decoded limit. Many real projects will not fit even when the provider accepts larger archives. There is no streaming, multipart, or chunked upload implementation. Review and implement a bounded alternative before promising large-project publishing; do not simply raise limits without considering memory and request limits.
-- The upload tool supports only source ZIPs. It cannot complete ordinary Cookiejar file-tier signed uploads requiring provider-returned headers, arbitrary signed destinations, or Project Tree large-file uploads. Those need a separately reviewed adapter.
+- The upload tool supports only source ZIPs. It cannot complete ordinary Cookiejar file-tier signed uploads requiring provider-returned headers, arbitrary signed destinations, or other providers' upload contracts. Those need a separately reviewed adapter.
 - Source download routes can return private signed URLs. The generic read tool does not become an arbitrary signed-URL download client, and binary responses remain size-limited. A clone/download workflow needs a supported, authorized path of its own.
 - Dedicated create/deploy helpers now handle the supported prepare/upload/start sequence. There is no dedicated domain helper, automatic build-completion watcher, or automatic reconciliation. Final status/content checks and any approved domain work remain caller responsibilities.
 - The global write flag is broader than publishing. The code does not enforce per-site write grants, a publishing-only route allowlist, domain ownership/assignment policy, or confirmation receipts. Add server-side restrictions when required; never present agent instructions as enforced access controls.
@@ -102,11 +106,13 @@ These are current implementation limits, not reasons to abandon an authorized ta
 
 Report the exact tool, sanitized arguments/target, error code or status, and smallest needed owner action. Don't expose secrets or signed URLs when explaining an error. If current tools or approvals truly block progress, say which step is blocked and continue independent authorized work.
 
-## Optional Project Tree
+## Synthetic RPC example
 
-Project Tree is independent of Cookiejar. Leave `PROJECT_TREE_ENABLED` off unless requested; it requires its own verified endpoint/contract, native `PROJECT_TREE_API_URL` HTTPS origin setting, and native `PROJECT_TREE_INGEST_TOKEN` secret. If the origin is missing or invalid, service readiness reports it disabled.
+`example_rpc` is a fictional records API in [services.example.mjs](services.example.mjs). Leave `EXAMPLE_RPC_ENABLED` unset for Cookiejar setup. Its example settings are `EXAMPLE_RPC_API_URL` for a server-owned HTTPS origin and `EXAMPLE_RPC_KEY` for a native hosted secret. A missing or invalid origin keeps service readiness disabled. Tests use `https://records.example.invalid` with fake credentials and mocked requests; do not treat that URL as a real endpoint.
 
-The example adapter uses POST `/` JSON actions with `x-ingest-token`. Inspect its actual `readActions` and `writeActions` in [services.example.mjs](services.example.mjs); POST alone does not mean mutation. `mailread` changes state and is not enabled. Credential actions such as `issue`/`mapkey`, unreviewed voice actions, and remote `sourceUrl` fetching are not exposed. Explain the credential's scope before enabling access. For edits, resolve and read the target first, distinguish append/replacement, and reconcile uncertain outcomes; do not assume optimistic concurrency support.
+The example sends POST `/` JSON actions using `X-Example-Key`. It classifies `read_record` and `list_records` as read-only, and `write_record` and `delete_record` as mutations. These names describe an invented contract, not a supported real API. POST alone does not mean mutation: preserve behavior-based action allowlists, credential isolation, unknown-action rejection, and the restriction on remote `sourceUrl` fetching.
+
+For an authorized real adapter, verify the provider's origin, authentication, exact action semantics, credential scope, and route restrictions; update the registry and synthetic tests accordingly. Do not merely point the fictional example at a real host and enable it. Obtain required approval before provisioning credentials or expanding persistent access. For edits, resolve and read the target first, distinguish append/replacement, and reconcile uncertain outcomes; do not assume optimistic concurrency support.
 
 ## Handoff back to the owner
 

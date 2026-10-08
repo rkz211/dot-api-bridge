@@ -1,6 +1,6 @@
 import {SERVICES} from './services.mjs';
 import {test} from 'node:test';import assert from 'node:assert/strict';import {genericCall,prepare,clean,decodeBody} from './generic.mjs';import {createHandler} from './worker.mjs';
-const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',WRITES_ENABLED:'true',PROJECT_TREE_ENABLED:'true',PROJECT_TREE_API_URL:'https://project-tree-api.example.invalid',PROJECT_TREE_INGEST_TOKEN:'DUMMY_TREE_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
+const env={COOKIEJAR_ENABLED:'true',HUB_KEY:'DUMMY_COOKIEJAR_SECRET',WRITES_ENABLED:'true',EXAMPLE_RPC_ENABLED:'true',EXAMPLE_RPC_API_URL:'https://records.example.invalid',EXAMPLE_RPC_KEY:'DUMMY_EXAMPLE_RPC_SECRET'};const id='12345678-1234-1234-1234-123456789abc';const read={serviceId:'cookiejar',method:'GET',path:'/me',siteId:'example-site'};
 function ledger(){const rows=new Map();return {rows,async get(k){return rows.get(k)},async claim(k,f){if(rows.has(k))return false;rows.set(k,{fingerprint:f,state:'in_progress'});return true;},async set(k,s,r){Object.assign(rows.get(k),{state:s,result:JSON.stringify(r)});}}}
 test('generic GET/HEAD uses fixed service auth and allows only safe headers',async()=>{for(const method of ['GET','HEAD']){const r=await genericCall('bridge_api_read',{...read,method,headers:{Accept:'application/json'}},env,async(u,o)=>{assert.equal(u,SERVICES.cookiejar.baseUrl+'/me');assert.equal(o.headers.get('Authorization'),'Bearer '+env.HUB_KEY);assert.equal(o.headers.get('X-Site'),'example-site');assert.equal(o.redirect,'manual');return Response.json({ok:true});});assert.equal(r.status,200);}});
 test('SSRF/traversal/origin/query/header injection and credential routes rejected',()=>{for(const path of ['https://evil.invalid','//evil.invalid','/../key','/%2e%2e/key','/%252e/key','/a\\b','/x?target=evil','/x#evil','/key','/env','/sites/x/rotate','/admin/sites','/v1/auth','/sites/x/env'])assert.throws(()=>prepare({...read,path},env));for(const header of ['Authorization','X-Site','Host','Cookie','Proxy-Authorization','X-Forwarded-Host'])assert.throws(()=>prepare({...read,headers:{[header]:'bad'}},env));assert.throws(()=>prepare({...read,query:{token:'secret'}},env));});
@@ -9,8 +9,32 @@ test('network uncertainty and HTTP500 persist reconciliation, never replay mutat
 test('credential response fields and exact configured secrets are redacted before storage',async()=>{const l=ledger();const r=await genericCall('bridge_api_write',{serviceId:'cookiejar',method:'POST',path:'/sites',bodyJson:{name:'Requested'},operationId:id},env,async()=>Response.json({siteId:'s',token:'new token',nested:{secretAccessKey:'new credential',text:env.HUB_KEY}}),l);assert.equal(r.result.response.bodyJson.token,'[REDACTED]');assert.equal(r.result.response.bodyJson.nested.secretAccessKey,'[REDACTED]');assert.ok(!JSON.stringify([...l.rows.values()]).includes('new token'));});
 test('JSON/text/base64 request bodies supported with strict exclusivity and bounds',()=>{assert.equal(prepare({...read,method:'POST',bodyText:'hello'},env).requestBody,'hello');assert.equal(prepare({...read,method:'PUT',bodyBase64:btoa('hello')},env).requestBody.length,5);assert.throws(()=>prepare({...read,method:'POST',bodyText:'a',bodyJson:{}},env));assert.throws(()=>prepare({...read,method:'POST',bodyText:'x'.repeat(524289)},env));assert.throws(()=>prepare({...read,method:'POST',bodyJson:{nested:{apiKey:'bad'}}},env));});
 test('redirect never followed and binary or oversized responses handled safely',async()=>{let n=0;const redirect=await genericCall('bridge_api_read',read,env,async()=>{n++;return new Response(null,{status:302,headers:{Location:'https://evil.invalid'}});});assert.equal(redirect.redirectRefused,true);assert.equal(n,1);const binary=await genericCall('bridge_api_read',read,env,async()=>new Response(new Uint8Array([1,2,3]),{headers:{'content-type':'application/octet-stream'}}));assert.equal(binary.bodyBase64,'AQID');await assert.rejects(()=>genericCall('bridge_api_read',read,env,async()=>new Response('x'.repeat(524289))));await assert.rejects(()=>genericCall('bridge_api_read',read,env,async()=>new Response(env.HUB_KEY,{headers:{'content-type':'application/octet-stream'}})));});
-test('ProjectTree disabled by default, uses its own token after configured',async()=>{const a={serviceId:'projecttree',method:'POST',path:'/',bodyJson:{action:'tree'}};await assert.rejects(()=>genericCall('bridge_api_read',a,{HUB_KEY:'cookie-only'},()=>{throw Error('must not call')}));const r=await genericCall('bridge_api_read',a,env,async(u,o)=>{assert.equal(u,'https://project-tree-api.example.invalid/');assert.equal(o.headers.get('x-ingest-token'),env.PROJECT_TREE_INGEST_TOKEN);assert.equal(o.headers.get('Authorization'),null);return Response.json({ok:true,nodes:[]});});assert.equal(r.bodyJson.ok,true);});
-test('ProjectTree read POST action allowlist excludes mutation and credential actions',async()=>{for(const action of ['write','mailread','issue','mapkey','voice','speak','UNKNOWN'])await assert.rejects(()=>genericCall('bridge_api_read',{serviceId:'projecttree',method:'POST',path:'/',bodyJson:{action}},env,()=>{throw Error('must not call')}));assert.throws(()=>prepare({serviceId:'projecttree',method:'POST',path:'/',bodyJson:{action:'submit',sourceUrl:'https://evil.invalid'}},env));});
+test('Synthetic RPC example disabled by default, uses its own token after configured',async()=>{const a={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'read_record'}};await assert.rejects(()=>genericCall('bridge_api_read',a,{HUB_KEY:'cookie-only'},()=>{throw Error('must not call')}));const r=await genericCall('bridge_api_read',a,env,async(u,o)=>{assert.equal(u,'https://records.example.invalid/');assert.equal(o.headers.get('X-Example-Key'),env.EXAMPLE_RPC_KEY);assert.equal(o.headers.get('Authorization'),null);return Response.json({ok:true,records:[]});});assert.equal(r.bodyJson.ok,true);});
+test('Synthetic RPC example read POST action allowlist excludes mutation and credential actions',async()=>{for(const action of ['write_record','delete_record','mark_seen','rotate_key','unreviewed_action','UNKNOWN'])await assert.rejects(()=>genericCall('bridge_api_read',{serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action}},env,()=>{throw Error('must not call')}));assert.throws(()=>prepare({serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'write_record',sourceUrl:'https://evil.invalid'}},env));});
+test('synthetic RPC rejects unknown actions, method/path/query overrides, and missing credentials',async()=>{
+ const args={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'read_record'}};
+ for(const override of [{method:'GET'},{path:'/records'},{query:{target:'other'}},{bodyJson:{}},{bodyJson:{action:'rotate_key'}},{bodyJson:{action:'unreviewed_action'}}]){
+  assert.throws(()=>prepare({...args,...override},env));
+ }
+ const settings={...env,EXAMPLE_RPC_KEY:undefined};
+ await assert.rejects(()=>genericCall('bridge_api_read',args,settings,()=>{throw Error('must not call')}),/credential not configured/);
+});
+test('synthetic RPC writes retain flag gating, credential isolation, redaction, and durable replay protection',async()=>{
+ const args={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'write_record',recordId:'synthetic-record',value:'approved'},operationId:id};
+ let calls=0;const l=ledger();
+ const fetcher=async(url,options)=>{
+  calls++;assert.equal(url,'https://records.example.invalid/');assert.equal(options.headers.get('X-Example-Key'),env.EXAMPLE_RPC_KEY);assert.equal(options.headers.get('Authorization'),null);
+  assert.equal(options.redirect,'manual');assert.equal(JSON.parse(options.body).action,'write_record');
+  return Response.json({ok:true,message:env.EXAMPLE_RPC_KEY,token:'new synthetic credential'});
+ };
+ await assert.rejects(()=>genericCall('bridge_api_write',args,{...env,WRITES_ENABLED:'false'},fetcher,l),/Writes are disabled/);
+ assert.equal(calls,0);
+ const result=await genericCall('bridge_api_write',args,env,fetcher,l);
+ assert.equal(result.state,'completed');assert.equal(result.result.response.bodyJson.message,'[REDACTED]');assert.equal(result.result.response.bodyJson.token,'[REDACTED]');
+ assert.equal((await genericCall('bridge_api_write',args,env,fetcher,l)).replayed,true);
+ await assert.rejects(()=>genericCall('bridge_api_write',{...args,bodyJson:{...args.bodyJson,value:'changed'}},env,fetcher,l),/different arguments/);
+ assert.equal(calls,1);assert.ok(!JSON.stringify([...l.rows.values()]).includes(env.EXAMPLE_RPC_KEY));
+});
 test('preview does not call upstream or grant approval',async()=>{const r=await genericCall('bridge_api_preview',{serviceId:'cookiejar',method:'DELETE',path:'/c/test/item'},env,()=>{throw Error('must not call')});assert.equal(r.method,'DELETE');assert.match(r.approval,/does not authorize/);});
 test('managed identity required and unknown arguments blocked for generic tools',async()=>{let n=0;const h=createHandler(()=>{n++});const request=(user,args)=>new Request('https://bridge.invalid/mcp',{method:'POST',headers:{'content-type':'application/json',...(user===null?{}:{'oai-authenticated-user-id':user})},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'bridge_api_read',arguments:args}})});for(const user of [null,'',' ','\t'])assert.equal((await h(request(user,read),env)).status,403);const j=await(await h(request('owner',{...read,apiKey:'forbidden'}),env)).json();assert.equal(j.error.code,-32602);assert.equal(n,0);});
 
@@ -37,12 +61,12 @@ test('session-shaped input fields rejected and response fields redacted before p
  for(const key of keys)assert.equal(result.result.response.bodyJson.nested[key],'[REDACTED]');
 });
 
- test('optional Project Tree endpoint is inactive unless a safe server setting is present',async()=>{
+ test('optional synthetic RPC endpoint is inactive unless a safe server setting is present',async()=>{
  for(const url of [undefined,'http://bad.invalid','https://user:pass@bad.invalid','https://bad.invalid/path','https://bad.invalid/?token=x']){
- const settings={...env,PROJECT_TREE_API_URL:url};
+ const settings={...env,EXAMPLE_RPC_API_URL:url};
  const status=await genericCall('bridge_services',{},settings,()=>{throw Error('No network');});
- assert.equal(status.services.find(s=>s.serviceId==='projecttree').enabled,false);
- assert.throws(()=>prepare({serviceId:'projecttree',method:'POST',path:'/',bodyJson:{action:'tree'}},settings));
+ assert.equal(status.services.find(s=>s.serviceId==='example_rpc').enabled,false);
+ assert.throws(()=>prepare({serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'read_record'}},settings));
  }
 });
 

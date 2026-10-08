@@ -1,8 +1,12 @@
-# dot API shim
+# dot API bridge
 
-A small, private MCP bridge for connecting a dot to APIs through server-held credentials. The client chooses an approved service and request; the server fixes the upstream origin, injects the credential, bounds responses, and records write attempts durably.
+An assistant setup may lack a supported tool or connection for a particular external API. This private hosted MCP bridge adds that connection for a dot or another compatible MCP client, using server-held credentials.
+
+The client chooses an approved service and request; the server fixes the upstream origin, injects the credential, bounds responses, and records write attempts durably.
 
 This is source you deploy into your own owner-private Site. Sites-managed authentication and the Site's owner-only access control authorize callers. It is not a shared public API or an automatically configured integration.
+
+Cookiejar is the included concrete example. It is currently waitlist-stage, so its examples require existing authorized access and a valid credential; this repository does not grant access. A separate synthetic JSON-action API example shows how the generic registry works without depending on another real service.
 
 ## Start here
 
@@ -22,7 +26,7 @@ The public source already exposes these MCP tools in [worker.mjs](worker.mjs), [
 | `bridge_connection_info` | Returns Sites-managed authentication status and the authenticated caller ID, never credentials |
 | `bridge_services` | Reports service activation and whether a credential is configured |
 | `bridge_api_preview` | Validates a request without contacting the API |
-| `bridge_api_read` | Fixed-origin GET/HEAD, plus reviewed read-only Project Tree JSON actions |
+| `bridge_api_read` | Fixed-origin GET/HEAD, plus allowlisted read-only JSON actions for configured RPC services |
 | `bridge_api_write` | Fixed-origin POST/PUT/PATCH/DELETE with a durable operation ledger |
 | `bridge_api_upload` | Cookiejar source ZIP PUT to a validated signed URL, with matching SHA-256 |
 | `bridge_operation_status` | Reads the stored outcome without repeating a mutation |
@@ -45,7 +49,7 @@ The owner approves the requested access, enters their own upstream credential in
 
 Keep these milestones separate: **code ready → owner-private bridge deployed → secret configured → plugin connected → managed authentication verified → authenticated read verified → write capability approved/configured → specific live action verified**. Publishing the bridge is separate from publishing a website through Cookiejar.
 
-For Cookiejar-only use, leave Project Tree disabled. No Project Tree account or token is needed.
+For Cookiejar-only use, leave the synthetic `example_rpc` service disabled. It is an illustration, not a second account to set up.
 
 ## Design
 
@@ -81,18 +85,27 @@ The build places the worker entry point at `dist/server/index.js`. Provision a D
 
 ## Configuration
 
-The default registry in `services.example.mjs`, re-exported by `services.mjs`, contains the Cookiejar API origin and source-upload host. No Cookiejar adapter editing is required. These are provider infrastructure addresses, not credentials. Keep credential environment-variable names in source and enter their values only in native runtime Settings. Optional Project Tree gets its verified origin from `PROJECT_TREE_API_URL`.
+The default registry in `services.example.mjs`, re-exported by `services.mjs`, contains the Cookiejar API origin and source-upload host. No Cookiejar adapter editing is required for the included contract. These are provider infrastructure addresses, not credentials. Keep credential environment-variable names in source and enter their values only in native runtime Settings.
 
-Native runtime settings:
+Native runtime settings for Cookiejar:
 
 - `HUB_KEY`: Cookiejar API secret
 - `COOKIEJAR_ENABLED=true`: activate the reviewed Cookiejar service configuration
-- `PROJECT_TREE_API_URL`: optional verified HTTPS Project Tree origin, with no credentials, query, or path
-- `PROJECT_TREE_INGEST_TOKEN`: Project Tree API secret
-- `PROJECT_TREE_ENABLED=true`: activate the reviewed Project Tree service configuration
 - `WRITES_ENABLED=true`: enable write tools only after approved access expansion and durable storage setup
 - `DB`: platform-provisioned durable SQL binding, not a text secret
 
 `OWNER_USER_ID` is no longer used. A legacy value can remain without blocking an authenticated connection. Authentication comes from Sites, and authorization relies on the Site remaining owner-private.
 
-Cookiejar and Project Tree are both inactive unless their activation flag is set; Project Tree also requires a valid server-configured origin. Writes also require their separate flag. Project Tree supports a reviewed JSON-action allowlist; it does not expose every upstream action. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Project Tree large-file signed upload completion needs a separately reviewed flow.
+Both example services are inactive unless their activation flag is set. Writes also require their separate flag. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Other upload contracts need a separately reviewed flow.
+
+### Synthetic RPC example
+
+`example_rpc` is a fictional records API with `read_record` / `list_records` read actions and `write_record` / `delete_record` write actions. Its `X-Example-Key` authentication header and action names are illustrative, not a verified provider contract. Tests mock every request to `https://records.example.invalid`; there is no live service at that address.
+
+- `EXAMPLE_RPC_API_URL`: server-configured HTTPS origin with no credentials, path, query, or fragment
+- `EXAMPLE_RPC_KEY`: example service credential, entered only in native secret storage
+- `EXAMPLE_RPC_ENABLED=true`: activation flag, left unset for normal Cookiejar setup
+
+Do not activate the fictional service as a live integration. To adapt it to a real API, review and update the registry's origin, authentication, action classification, route restrictions, and tests against that API's actual contract; obtain the required access approval before provisioning credentials or enabling it. The generic RPC machinery supports that extension without adding a new tool handler. See [the agent guide](agent-handoff.md#synthetic-rpc-example).
+
+The display name is **dot API bridge**. The working repository URL remains [rkz211/dot-api-shim](https://github.com/rkz211/dot-api-shim); package, tool, and sample verification identifiers retain their existing names for compatibility.

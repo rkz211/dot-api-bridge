@@ -2,6 +2,8 @@
 
 `static-site/` is a dependency-free, harmless site for an explicitly approved live test. It contains no account identifiers, credentials, forms, external scripts, or trackers.
 
+Cookiejar is currently waitlist-stage. The publishing steps require existing authorized Cookiejar API access; this sample does not grant access. Anyone can run the local build without a Cookiejar account.
+
 Verify locally:
 
 ```sh
