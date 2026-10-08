@@ -11,7 +11,7 @@ import {SERVICES} from './services.mjs';
 const base64 = readFileSync(new URL('./test-fixtures/source.b64', import.meta.url), 'utf8').trim();
 const env = {
   COOKIEJAR_ENABLED: 'true', HUB_KEY: 'FAKE_TEST_CREDENTIAL',
-  OWNER_USER_ID: 'test-owner', WRITES_ENABLED: 'true'
+  WRITES_ENABLED: 'true'
 };
 const operationId = '12345678-1234-1234-1234-123456789abc';
 const siteId = 'example-site';
@@ -42,7 +42,7 @@ const deployArgs = async () => ({
   sourceSha256: await digest(validateZip(base64))
 });
 
-const rpc = (name, args = {}, user = env.OWNER_USER_ID) => new Request('https://bridge.example.invalid/mcp', {
+const rpc = (name, args = {}, user = 'test-owner') => new Request('https://bridge.example.invalid/mcp', {
   method: 'POST',
   headers: {'content-type': 'application/json', ...(user ? {'oai-authenticated-user-id': user} : {})},
   body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name, arguments: args}})
@@ -435,11 +435,11 @@ test('upload or start failures retain their phase and never resume on duplicate 
   }
 });
 
-test('publishing calls require the managed owner and reject extra arguments before upstream', async () => {
+test('publishing calls require a nonblank managed identity and reject extra arguments before upstream', async () => {
   let calls = 0;
   const handler = createHandler(() => {calls++;});
   const args = {operationId, name: 'Example'};
-  for (const user of ['other-owner', null]) {
+  for (const user of [null, '', ' ', '\t']) {
     assert.equal((await handler(rpc('cookiejar_create_site', args, user), env)).status, 403);
     assert.equal((await handler(rpc('cookiejar_owned_sites', {}, user), env)).status, 403);
   }

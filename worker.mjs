@@ -4,7 +4,7 @@ import {SERVICES} from './services.mjs';
 const MAX_REQUEST = 1024 * 1024;
 const CONNECTION = {
   name: 'bridge_connection_info',
-  description: 'Read the managed authenticated caller ID and owner-binding status. Never returns credentials.',
+  description: 'Read Sites-managed authentication status and the authenticated caller ID. Never returns credentials.',
   inputSchema: {type: 'object', properties: {}, required: [], additionalProperties: false},
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false}
 };
@@ -45,15 +45,16 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
     if (rpc.method === 'ping') return result(id, {});
     if (rpc.method === 'tools/list') return result(id, {tools: TOOLS.filter(t => t.annotations.readOnlyHint || env.WRITES_ENABLED === 'true')});
     if (rpc.method !== 'tools/call') return error(id, -32601, 'Method not found');
-    // Trust this header ONLY behind Sites-managed authentication. Do not expose the worker directly.
-    const user = request.headers.get('oai-authenticated-user-id');
+    // Requires an owner-private Site: Sites-managed authentication and its owner-only ACL
+    // authorize the caller. Never expose the worker directly or trust caller-supplied headers.
+    // Broader sharing requires a separately reviewed application authorization policy.
+    const user = request.headers.get('oai-authenticated-user-id')?.trim();
     if (!user) return error(id, -32001, 'Authentication required', 403);
     const name = rpc.params?.name, args = rpc.params?.arguments ?? {};
     const tool = TOOLS.find(t => t.name === name);
     if (!tool) return error(id, -32602, 'Unknown tool');
     if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(k => !Object.hasOwn(tool.inputSchema.properties, k)) || tool.inputSchema.required.some(k => args[k] === undefined)) return error(id, -32602, 'Invalid arguments');
-    if (name === CONNECTION.name) return result(id, {content: [{type: 'text', text: JSON.stringify({userId: user, ownerConfigured: Boolean(env.OWNER_USER_ID), callerMatchesOwner: Boolean(env.OWNER_USER_ID && user === env.OWNER_USER_ID)})}], isError: false});
-    if (!env.OWNER_USER_ID || user !== env.OWNER_USER_ID) return error(id, -32001, 'Owner authentication required', 403);
+    if (name === CONNECTION.name) return result(id, {content: [{type: 'text', text: JSON.stringify({authenticated: true, authentication: 'sites-managed', userId: user})}], isError: false});
     if (!tool.annotations.readOnlyHint && env.WRITES_ENABLED !== 'true') return error(id, -32002, 'Writes are disabled');
     try {
       const value = EXTRA_TOOLS.some(t => t.name === name)

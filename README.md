@@ -2,7 +2,7 @@
 
 A small, private MCP bridge for connecting a dot to APIs through server-held credentials. The client chooses an approved service and request; the server fixes the upstream origin, injects the credential, bounds responses, and records write attempts durably.
 
-This is source you deploy into your own private Sites account. It is not a shared public API or an automatically configured integration.
+This is source you deploy into your own owner-private Site. Sites-managed authentication and the Site's owner-only access control authorize callers. It is not a shared public API or an automatically configured integration.
 
 ## Start here
 
@@ -19,7 +19,7 @@ The public source already exposes these MCP tools in [worker.mjs](worker.mjs), [
 
 | Tool | Implemented behavior |
 | --- | --- |
-| `bridge_connection_info` | Returns the authenticated caller ID and owner-binding status, never credentials |
+| `bridge_connection_info` | Returns Sites-managed authentication status and the authenticated caller ID, never credentials |
 | `bridge_services` | Reports service activation and whether a credential is configured |
 | `bridge_api_preview` | Validates a request without contacting the API |
 | `bridge_api_read` | Fixed-origin GET/HEAD, plus reviewed read-only Project Tree JSON actions |
@@ -41,16 +41,16 @@ The dedicated helper accepts source ZIPs up to 512 KiB; it does not implement st
 
 The agent inspects the source and current contracts, completes authorized implementation, runs checks, prepares and publishes the authorized private bridge, presents its plugin connection, and verifies authenticated reads. It should not hand unfinished coding back to the owner as a setup instruction.
 
-The owner approves the requested access, enters their own upstream credential in native Sites Settings, and completes the plugin's connection/consent flow. The agent obtains the exact Sites caller ID from `bridge_connection_info`; the owner does not need to invent or look up an `OWNER_USER_ID` from email.
+The owner approves the requested access, enters their own upstream credential in native Sites Settings, and completes the plugin's connection/consent flow. The agent verifies Sites-managed authentication with `bridge_connection_info`; no manual owner-ID configuration is needed.
 
-Keep these milestones separate: **code ready → private bridge deployed → secret configured → plugin connected → owner bound → authenticated read verified → write capability approved/configured → specific live action verified**. Publishing the bridge is separate from publishing a website through Cookiejar.
+Keep these milestones separate: **code ready → owner-private bridge deployed → secret configured → plugin connected → managed authentication verified → authenticated read verified → write capability approved/configured → specific live action verified**. Publishing the bridge is separate from publishing a website through Cookiejar.
 
 For Cookiejar-only use, leave Project Tree disabled. No Project Tree account or token is needed.
 
 ## Design
 
 - A server-owned service registry selects a fixed HTTPS origin and credential environment variable.
-- The exact authenticated Sites owner is required for API actions.
+- Every tool call requires a nonblank Sites-managed authenticated identity; the owner-private Site's access control limits who can connect.
 - Request previews perform no network call and do not grant authorization.
 - Read and write tools are distinct. JSON action APIs must classify actions by behavior, not HTTP verb alone.
 - Writes are off until explicitly enabled and require durable storage and a stable operation identifier.
@@ -59,9 +59,9 @@ For Cookiejar-only use, leave Project Tree disabled. No Project Tree account or 
 
 ## Important limits
 
-This is a prototype, not a security certification. A fixed origin and blocked-route list are not a full service-specific permission model. Arbitrary text and binary payloads cannot be proven free of secrets. Review an API's exact contract and the user's permissions before enabling it. Keep the deployed Site private.
+This is a prototype, not a security certification. A fixed origin and blocked-route list are not a full service-specific permission model. Arbitrary text and binary payloads cannot be proven free of secrets. Review an API's exact contract and the user's permissions before enabling it. Keep the deployed Site owner-private. Broadening its access control requires a separately reviewed application authorization policy before sharing; this worker does not isolate multiple users' credentials or operation records.
 
-The tests use synthetic data, fake credentials, and mocked upstream calls. They do not establish that your live deployment, account access, or write operations work. Cookiejar provider configuration is included. Owner identity, credentials, runtime flags, and the Site-specific hosting manifest still require native setup.
+The tests use synthetic data, fake credentials, and mocked upstream calls. They do not establish that your live deployment, account access, or write operations work. Cookiejar provider configuration is included. Owner-private Site access, credentials, runtime flags, and the Site-specific hosting manifest still require native setup.
 
 ## License
 
@@ -85,7 +85,6 @@ The default registry in `services.example.mjs`, re-exported by `services.mjs`, c
 
 Native runtime settings:
 
-- `OWNER_USER_ID`: exact Sites-managed authenticated owner identifier
 - `HUB_KEY`: Cookiejar API secret
 - `COOKIEJAR_ENABLED=true`: activate the reviewed Cookiejar service configuration
 - `PROJECT_TREE_API_URL`: optional verified HTTPS Project Tree origin, with no credentials, query, or path
@@ -93,5 +92,7 @@ Native runtime settings:
 - `PROJECT_TREE_ENABLED=true`: activate the reviewed Project Tree service configuration
 - `WRITES_ENABLED=true`: enable write tools only after approved access expansion and durable storage setup
 - `DB`: platform-provisioned durable SQL binding, not a text secret
+
+`OWNER_USER_ID` is no longer used. A legacy value can remain without blocking an authenticated connection. Authentication comes from Sites, and authorization relies on the Site remaining owner-private.
 
 Cookiejar and Project Tree are both inactive unless their activation flag is set; Project Tree also requires a valid server-configured origin. Writes also require their separate flag. Project Tree supports a reviewed JSON-action allowlist; it does not expose every upstream action. Direct signed uploads currently support Cookiejar's exact source-storage path contract only. Project Tree large-file signed upload completion needs a separately reviewed flow.

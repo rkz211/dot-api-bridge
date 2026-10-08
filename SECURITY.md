@@ -1,10 +1,11 @@
 # Security model
 
-This is a private, owner-bound bridge for connecting an MCP client to an API. Publishing its source does not make a running instance safe for public access.
+This is an owner-private Sites bridge for connecting an MCP client to an API. Publishing its source does not make a running instance safe for public access.
 
-- Keep your deployed Site private and use Sites-managed MCP OAuth.
+- Keep your deployed Site owner-private and use Sites-managed MCP OAuth. The platform's owner-only access control is the authorization boundary.
 - Trust `oai-authenticated-user-id` only behind the Sites authentication boundary, where the platform supplies it. Never expose the worker directly on a host where callers can forge these headers.
-- Bind the deployment to the exact authenticated owner identifier. Fail closed when the owner or service credential is missing.
+- Every tool call fails closed when the trusted managed identity is missing or blank. API actions still require an enabled service and its credential. No manual `OWNER_USER_ID` check is used; legacy values are ignored.
+- Before broadening the Site's access control, separately review and implement application authorization and caller isolation. This worker shares its runtime credentials and operation ledger across accepted callers; it is not designed for a shared or public deployment. A connection-info response confirms managed authentication, not the current sharing configuration.
 - Enter API credentials only in native hosted secret storage. Do not paste them into chat, source code, issues, examples, URLs, or client tool arguments.
 - Cookiejar uses the included fixed provider origin. Optional Project Tree uses a trusted native runtime origin setting, validated as HTTPS without credentials, path, query, or fragment. Review the service-specific route policy on the server. Do not add caller-supplied destination URLs or authorization headers.
 - Reject redirects rather than forwarding credentials to another host.

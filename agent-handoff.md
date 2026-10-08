@@ -11,20 +11,20 @@ The source contains generic tools plus dedicated Cookiejar owned-site, create-si
 - Missing implementation: the necessary request/response or upload flow is not supported by code.
 - Missing configuration: disabled service, absent secret, missing optional endpoint setting, missing database/schema, or an unapplied saved version.
 - Missing connection: the Site's plugin is not installed/connected in this conversation.
-- Missing owner binding: the authenticated caller does not match `OWNER_USER_ID`.
+- Missing managed authentication: the tool call lacks a nonblank Sites-supplied identity.
 - Missing authorization: the owner has not approved the access expansion or exact live action.
 - Missing verification: the tool exists but the intended live result has not been observed.
 
-“Prepared a private bridge with writes disabled” describes only part of setup. State the next concrete step and who must take it. Don't report “no authenticated publishing connector” until you have checked the deployed source, tool discovery, connection, owner binding, runtime settings, and exact failed call.
+“Prepared a private bridge with writes disabled” describes only part of setup. State the next concrete step and who must take it. Don't report “no authenticated publishing connector” until you have checked the deployed source, tool discovery, connection, managed authentication, owner-private access control, runtime settings, and exact failed call.
 
 ## Build checklist
 
-- Use the owner's own private Site and managed OAuth boundary. Add the MCP capability using current Sites tooling; serve stateless HTTP `POST /mcp`. Reuse the Site's provisioned App/plugin on updates.
+- Use the owner's own owner-private Site and managed OAuth boundary. The Site's owner-only access control authorizes the nonblank managed identity required by every tool call; no manual owner-ID setting is needed. Broadening access requires a separately reviewed application authorization policy before sharing. Add the MCP capability using current Sites tooling; serve stateless HTTP `POST /mcp`. Reuse the Site's provisioned App/plugin on updates.
 - Read the current [Cookiejar contract](https://cookiejar.lol/contract/README.md). Verify the fixed API origin, Bearer authentication, `X-Site` scope, and exact source-storage host with current provider configuration. Keep all credential values out of code.
 - Review routes by behavior. The current Cookiejar policy blocks configured path segments such as `key`, `admin`, `env`, `auth`, and `rotate`, but is not a complete endpoint allowlist. Never classify an unfamiliar route as harmless solely because it uses GET.
 - Ensure the desired flow fits the actual [limits below](#known-limits-and-code-work). Add necessary implementation and synthetic tests within the authorized scope before asking the owner to enable it. If new implementation is outside scope, describe the exact gap and request approval.
 - Configure durable `DB` storage with [schema.sql](schema.sql). Keep writes disabled while building and connecting.
-- Run the tests, syntax checks, and build. Follow [SETUP.md](SETUP.md) for private deployment, owner secret entry, plugin connection, exact identity binding, and authenticated reads.
+- Run the tests, syntax checks, and build. Follow [SETUP.md](SETUP.md) for owner-private deployment, owner secret entry, plugin connection, managed authentication, and authenticated reads. `bridge_connection_info` returns `authenticated: true`, `authentication: "sites-managed"`, and the managed `userId`; verify the Site's access control separately. Legacy `OWNER_USER_ID` values are ignored.
 
 ## Preferred dedicated publishing flow
 
@@ -94,7 +94,6 @@ These are current implementation limits, not reasons to abandon an authorized ta
 | No bridge tools in this conversation | Check the correct Site's plugin, installation/connection, and current discovery; don't create another Site by default |
 | Only read tools appear | Confirm the deployed version and approved `WRITES_ENABLED` value; write/upload tools are filtered from discovery when off |
 | `Authentication required` / HTTP 403 | Complete the Site plugin's managed connection; don't forge identity headers |
-| `Owner authentication required` / HTTP 403 | Call `bridge_connection_info`, verify intended owner, correct native binding, redeploy |
 | `Writes are disabled` | Obtain missing capability approval before changing the flag; verify storage first |
 | `Unknown tool` / `Invalid arguments` | Compare exact deployed tool names and schemas, including the required fields |
 | `Request rejected or incomplete` / `-32006` | Error is deliberately generic. Check activation, origin, credential presence, arguments, route policy, body limits, `DB`/schema, and operation status without logging secrets |

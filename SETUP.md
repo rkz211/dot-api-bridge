@@ -1,6 +1,6 @@
 # Private Sites deployment
 
-This repository supplies source. Cookiejar provider configuration is included. Each owner still needs their own private deployment, credentials, plugin connection, and identity binding. Do not copy another person's deployment manifest, identifiers, or secrets.
+This repository supplies source. Cookiejar provider configuration is included. Each owner still needs their own owner-private deployment, credentials, and Sites-managed plugin connection. No manual owner-ID setting is required. Do not copy another person's deployment manifest, identifiers, or secrets.
 
 Use the current [Sites documentation](https://learn.chatgpt.com/docs/sites) and the Sites tools available in your environment. Also see [plugin setup](https://learn.chatgpt.com/docs/plugins). UI labels and deployment tooling can change; inspect the current tool schema rather than inventing a command.
 
@@ -25,7 +25,7 @@ The agent should:
 5. Provision a durable SQL binding named `DB` and apply [schema.sql](schema.sql) before writes. Merely adding a text setting named `DB` does not create a database. Keep `WRITES_ENABLED` unset or `false` initially.
 6. Run `npm test`, `npm run check`, and `npm run build` with Node.js 22+. The build writes `dist/server/index.js` and its runtime modules. Package that output using the current Sites workflow; local build success is not deployment success.
 
-Keep runtime values out of the hosting manifest. Use platform-managed authentication; never expose this worker directly where callers can forge identity headers.
+Keep runtime values out of the hosting manifest. Use platform-managed authentication and preserve the Site's owner-only access control; never expose this worker directly where callers can forge identity headers. Broadening access requires a separately reviewed application authorization policy before sharing, because credentials and operation records are not isolated by caller.
 
 ## 3. Publish the private bridge
 
@@ -51,21 +51,17 @@ When the current Sites connector exposes `get_site`, request `include_mcp_connec
 
 Suggested owner prompt:
 
-> Install/connect this bridge's plugin and complete its sign-in and permissions prompts with your own account. I'll then check the authenticated connection and finish owner binding.
+> Install/connect this bridge's plugin and complete its sign-in and permissions prompts with your own account. I'll then verify the authenticated connection.
 
 Verify the connection with `bridge_connection_info({})`. Installation alone is not a successful authenticated tool call.
 
-## 6. Bind the verified owner
+## 6. Verify Sites-managed authentication
 
-`bridge_connection_info` can run before owner binding. It returns `userId`, `ownerConfigured`, and `callerMatchesOwner`. The ID comes from the trusted `oai-authenticated-user-id` header supplied by Sites.
+Call `bridge_connection_info({})` through the connected Site plugin. Require `authenticated: true` and `authentication: "sites-managed"`. Its `userId` comes from the trusted `oai-authenticated-user-id` header supplied by Sites; keep that identifier private.
 
-Confirm that this is the intended owner's authenticated connection. Set `OWNER_USER_ID` to that exact returned ID using the supported native runtime settings flow, with the owner's approval. Do not guess it from an email, take it from another deployment, or ask the owner to manufacture one. If the agent cannot set the non-secret value through a supported route, show the verified value privately and guide the owner to set it in native Settings.
+Verify that the Site still has owner-only access in the native Sites controls. The worker requires a nonblank managed identity on every tool call and relies on that platform access control for authorization. A successful connection-info response proves managed authentication only; it does not independently inspect the Site's sharing settings or prove upstream credential validity.
 
-Suggested approval prompt:
-
-> The connection returned your Sites user ID. May I bind this private bridge to that verified account so only it can use the upstream API tools?
-
-Redeploy the approved saved version after the setting changes. Call `bridge_connection_info` again and require `ownerConfigured: true` and `callerMatchesOwner: true`. Keep the upstream tools fail-closed while this is incomplete.
+Do not add or copy an `OWNER_USER_ID` setting. Legacy values are ignored and can remain in place. There is no extra identity-binding step or setting-related redeploy. Missing or blank managed identity still fails with `Authentication required` / HTTP 403.
 
 ## 7. Verify authenticated reads
 
@@ -86,6 +82,6 @@ After approval, verify `DB` and the schema, set `WRITES_ENABLED=true`, redeploy,
 
 ## Completion report
 
-Report each stage independently: source checks; private bridge deployment; secret presence; plugin connection; verified owner binding; authenticated upstream reads; write tools exposed; any authorized create, upload, deploy, or domain operation. Mark untested stages as untested. Mock tests never prove a live publish.
+Report each stage independently: source checks; owner-private bridge deployment and access control; secret presence; plugin connection; managed authentication; authenticated upstream reads; write tools exposed; any authorized create, upload, deploy, or domain operation. Mark untested stages as untested. Mock tests never prove a live publish.
 
 No LLM API key is required by this bridge. Provider hosting and API charges may apply.
