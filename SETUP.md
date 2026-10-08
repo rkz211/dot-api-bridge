@@ -18,6 +18,15 @@ For a requested full publishing bridge, finish the authorized implementation whi
 
 ## 2. Prepare the implementation
 
+Use the canonical [dot API bridge repository](https://github.com/rkz211/dot-api-bridge). To get the source locally:
+
+```sh
+git clone https://github.com/rkz211/dot-api-bridge.git
+cd dot-api-bridge
+```
+
+For a dot or another agent working from a link, share the [agent guide](https://github.com/rkz211/dot-api-bridge/blob/main/agent-handoff.md) together with the requested scope.
+
 The agent should:
 
 1. Read [README.md](README.md), [SECURITY.md](SECURITY.md), and [agent-handoff.md](agent-handoff.md), then inspect the source.

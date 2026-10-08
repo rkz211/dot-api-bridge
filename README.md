@@ -10,6 +10,7 @@ Cookiejar is the included concrete example. It is currently waitlist-stage, so i
 
 ## Start here
 
+- [Source repository](https://github.com/rkz211/dot-api-bridge): canonical repository and clone URL
 - [Installation](SETUP.md): step-by-step setup, owner prompts, and verification gates
 - [Instructions for your dot](agent-handoff.md): implementation checklist, Cookiejar publishing sequence, and troubleshooting
 - [Security model and limits](SECURITY.md): trust boundary, route policy, opaque payloads, and uncertain writes
@@ -108,4 +109,4 @@ Both example services are inactive unless their activation flag is set. Writes a
 
 Do not activate the fictional service as a live integration. To adapt it to a real API, review and update the registry's origin, authentication, action classification, route restrictions, and tests against that API's actual contract; obtain the required access approval before provisioning credentials or enabling it. The generic RPC machinery supports that extension without adding a new tool handler. See [the agent guide](agent-handoff.md#synthetic-rpc-example).
 
-The display name is **dot API bridge**. The working repository URL remains [rkz211/dot-api-shim](https://github.com/rkz211/dot-api-shim); package, tool, and sample verification identifiers retain their existing names for compatibility.
+The display name and repository are **dot API bridge** and [rkz211/dot-api-bridge](https://github.com/rkz211/dot-api-bridge). Package, tool, and sample verification identifiers retain their existing names for compatibility.

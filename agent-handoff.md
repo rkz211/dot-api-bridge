@@ -2,6 +2,8 @@
 
 Use this guide with [SETUP.md](SETUP.md). The repository is implementation material, not permission to change an account, enable persistent access, or publish a website. Work within the owner's request and the current platform approval rules.
 
+The canonical source is [rkz211/dot-api-bridge](https://github.com/rkz211/dot-api-bridge), with the [setup guide](https://github.com/rkz211/dot-api-bridge/blob/main/SETUP.md) in the same repository. Clone from `https://github.com/rkz211/dot-api-bridge.git` when a local checkout is needed.
+
 Start with the actual connection gap: check whether this assistant setup already has a supported tool for the requested API. When it does not, this private hosted MCP bridge can supply a reviewed connection. Do not make universal claims about ChatGPT or dot being unable to call external APIs.
 
 Cookiejar is the included concrete example and is currently waitlist-stage. Its live setup and publishing instructions apply only to owners who already have authorized API access. Confirm that prerequisite without asking for a credential in chat. The fictional RPC example below demonstrates extension mechanics; it is not another available provider.
