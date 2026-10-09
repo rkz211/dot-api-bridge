@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HTML, renderUi } from '../ui.mjs';
 class Element {
-  constructor(tag, document) { this.tagName=tag.toUpperCase();this.document=document;this.children=[];this.attributes={};this.events={};this.dataset={};this.value='';this.disabled=false;this.hidden=false;this.className='';this._text='';this.parentNode=null; }
+  constructor(tag, document) { this.style={setProperty(){}};this.tagName=tag.toUpperCase();this.document=document;this.children=[];this.attributes={};this.events={};this.dataset={};this.value='';this.disabled=false;this.hidden=false;this.className='';this._text='';this.parentNode=null; }
   set textContent(v){this._text=String(v);this.children=[];}
   get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}
   append(...items){for(let item of items){if(typeof item==='string')item=this.document.createTextNode(item);item.parentNode=this;this.children.push(item);}}

@@ -497,3 +497,27 @@
   document.addEventListener('visibilitychange', reset);
   motion.addEventListener('change', reset);
 })();
+
+// Shuffled palette bags: each colour appears once, with a preplanned seamless boundary.
+(() => {
+  const background = document.getElementById('space-background');
+  if (!background) return;
+  const palette = [["#115357", "#5eddd1"], ["#c64000", "#ffbc65"], ["#007330", "#70ffac"], ["#2b315c", "#aaa8ec"], ["#304a2e", "#a3d8a9"], ["#12465b", "#71cde4"], ["#c52c46", "#ff9eae"], ["#606000", "#ffff00"], ["#5c293f", "#e99ebb"], ["#006bda", "#83caff"], ["#532b52", "#dd9bd5"], ["#1b4e50", "#8ed9da"], ["#8432c9", "#d7a2ff"], ["#294b47", "#a0d9cc"], ["#473451", "#d3afe3"]];
+  const shuffle = previous => {
+    const bag = palette.map(pair => pair.slice());
+    for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; }
+    if (previous && bag[0][0] === previous) [bag[0], bag[1]] = [bag[1], bag[0]];
+    return bag;
+  };
+  let current = shuffle(null), next = shuffle(current.at(-1)[0]);
+  const apply = () => {
+    current.forEach(([core, glint], i) => { background.style.setProperty('--palette-core-' + i, core); background.style.setProperty('--palette-glint-' + i, glint); });
+    background.style.setProperty('--palette-next-core', next[0][0]);
+    background.style.setProperty('--palette-next-glint', next[0][1]);
+  };
+  apply();
+  background.addEventListener('animationiteration', event => {
+    if (event.animationName !== 'cloud-palette-cycle' || event.pseudoElement !== '::after') return;
+    current = next; next = shuffle(current.at(-1)[0]); apply();
+  });
+})();

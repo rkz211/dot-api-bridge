@@ -10,7 +10,7 @@ test('energy scales with speed, caps brightness and pool size, and ignores touch
  const background=make();
  const document={hidden:false,getElementById:()=>background,createElement:tag=>{const e=make();if(tag==='span')traces.push(e);return e},documentElement:{addEventListener:(n,f)=>handlers[n]=f},addEventListener:(n,f)=>handlers[n]=f};
  const window={matchMedia:()=>media,addEventListener:(n,f)=>handlers[n]=f};
- vm.runInNewContext(client.slice(client.indexOf('// Event-driven energy')), {window,document});
+ vm.runInNewContext(client.slice(client.indexOf('// Event-driven energy'),client.indexOf('// Shuffled palette bags')), {window,document});
  const move=(x,t,type='mouse')=>handlers.pointermove({pointerType:type,clientX:x,clientY:100,timeStamp:t});
  assert.equal(traces.length,12);move(0,0);move(5,40);const slow=+traces[0].style['--energy'];move(105,80);assert(+traces[1].style['--energy']>slow);assert(+traces[1].style['--energy']<=.67);
  for(let i=3;i<30;i++)move(i*100,i*40);assert.equal(traces.length,12);

@@ -75,4 +75,4 @@ The agent should return the verified private setup link and the smallest remaini
 
 ## Background effects
 
-The clouds hold each of 15 colors for three minutes, then blend for twelve seconds. Refreshing restarts at teal. Mouse movement adds a short fading light to the existing background; faster movement makes it stronger. Controls stay still. Touch devices do not use this effect, and your system's Reduced Motion preference disables it and keeps the cloud color static. No extra settings or permissions are required.
+The clouds shuffle all 15 colors, using each once before reshuffling and preventing a repeated color at the boundary. Each holds for three minutes, then blends for twelve seconds. Refreshing starts a fresh shuffle. Mouse movement adds a short fading light to the existing background; faster movement makes it stronger. Controls stay still. Touch devices do not use this effect, and your system's Reduced Motion preference disables it and keeps the cloud color static. No extra settings or permissions are required.

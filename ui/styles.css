@@ -93,22 +93,22 @@ input,textarea,select,.search-wrap input,.handoff-card{background:#050505;border
 @property --cloud-glint{syntax:"<color>";inherits:false;initial-value:#5eddd1}
 .space-background:after{--cloud-core:#115357;--cloud-glint:#5eddd1;background:radial-gradient(ellipse at 65% 15%,color-mix(in srgb,var(--cloud-core) 65%,transparent) 0,color-mix(in srgb,var(--cloud-core) 45%,transparent) 18%,transparent 42%),radial-gradient(ellipse at 30% 76%,color-mix(in srgb,var(--cloud-core) 50%,transparent) 0,color-mix(in srgb,var(--cloud-core) 25%,transparent) 18%,transparent 37%),radial-gradient(ellipse at 73% 70%,#7d838b45 0,transparent 38%),radial-gradient(ellipse at 61% 9%,color-mix(in srgb,var(--cloud-glint) 12.5%,transparent) 0,transparent 26%);animation:nebula-drift 21s ease-in-out -9s infinite alternate-reverse,cloud-palette-cycle 2880s linear infinite}
 @keyframes cloud-palette-cycle{
-0.00000000%,6.25000000%{--cloud-core:#115357;--cloud-glint:#5eddd1}/* Teal */
-6.66666667%,12.91666667%{--cloud-core:#c64000;--cloud-glint:#ffbc65}/* Bright orange */
-13.33333333%,19.58333333%{--cloud-core:#22513d;--cloud-glint:#8cddbf}/* Jade */
-20.00000000%,26.25000000%{--cloud-core:#2b315c;--cloud-glint:#aaa8ec}/* Indigo */
-26.66666667%,32.91666667%{--cloud-core:#304a2e;--cloud-glint:#a3d8a9}/* Forest */
-33.33333333%,39.58333333%{--cloud-core:#12465b;--cloud-glint:#71cde4}/* Ocean */
-40.00000000%,46.25000000%{--cloud-core:#5e292e;--cloud-glint:#efaaa8}/* Garnet */
-46.66666667%,52.91666667%{--cloud-core:#354554;--cloud-glint:#b0c5d9}/* Slate */
-53.33333333%,59.58333333%{--cloud-core:#5c293f;--cloud-glint:#e99ebb}/* Berry */
-60.00000000%,66.25000000%{--cloud-core:#19385f;--cloud-glint:#8ab7f0}/* Sapphire */
-66.66666667%,72.91666667%{--cloud-core:#532b52;--cloud-glint:#dd9bd5}/* Plum */
-73.33333333%,79.58333333%{--cloud-core:#1b4e50;--cloud-glint:#8ed9da}/* Lagoon */
-80.00000000%,86.25000000%{--cloud-core:#412c59;--cloud-glint:#c49ee9}/* Violet */
-86.66666667%,92.91666667%{--cloud-core:#294b47;--cloud-glint:#a0d9cc}/* Sea glass */
-93.33333333%,99.58333333%{--cloud-core:#473451;--cloud-glint:#d3afe3}/* Amethyst */
-100%{--cloud-core:#115357;--cloud-glint:#5eddd1}}
+0.00000000%,6.25000000%{--cloud-core:var(--palette-core-0,#115357);--cloud-glint:var(--palette-glint-0,#5eddd1)}/* Teal */
+6.66666667%,12.91666667%{--cloud-core:var(--palette-core-1,#c64000);--cloud-glint:var(--palette-glint-1,#ffbc65)}/* Bright orange */
+13.33333333%,19.58333333%{--cloud-core:var(--palette-core-2,#007330);--cloud-glint:var(--palette-glint-2,#70ffac)}/* Jade */
+20.00000000%,26.25000000%{--cloud-core:var(--palette-core-3,#2b315c);--cloud-glint:var(--palette-glint-3,#aaa8ec)}/* Indigo */
+26.66666667%,32.91666667%{--cloud-core:var(--palette-core-4,#304a2e);--cloud-glint:var(--palette-glint-4,#a3d8a9)}/* Forest */
+33.33333333%,39.58333333%{--cloud-core:var(--palette-core-5,#12465b);--cloud-glint:var(--palette-glint-5,#71cde4)}/* Ocean */
+40.00000000%,46.25000000%{--cloud-core:var(--palette-core-6,#c52c46);--cloud-glint:var(--palette-glint-6,#ff9eae)}/* Garnet */
+46.66666667%,52.91666667%{--cloud-core:var(--palette-core-7,#606000);--cloud-glint:var(--palette-glint-7,#ffff00)}/* Yellow */
+53.33333333%,59.58333333%{--cloud-core:var(--palette-core-8,#5c293f);--cloud-glint:var(--palette-glint-8,#e99ebb)}/* Berry */
+60.00000000%,66.25000000%{--cloud-core:var(--palette-core-9,#006bda);--cloud-glint:var(--palette-glint-9,#83caff)}/* Sapphire */
+66.66666667%,72.91666667%{--cloud-core:var(--palette-core-10,#532b52);--cloud-glint:var(--palette-glint-10,#dd9bd5)}/* Plum */
+73.33333333%,79.58333333%{--cloud-core:var(--palette-core-11,#1b4e50);--cloud-glint:var(--palette-glint-11,#8ed9da)}/* Lagoon */
+80.00000000%,86.25000000%{--cloud-core:var(--palette-core-12,#8432c9);--cloud-glint:var(--palette-glint-12,#d7a2ff)}/* Violet */
+86.66666667%,92.91666667%{--cloud-core:var(--palette-core-13,#294b47);--cloud-glint:var(--palette-glint-13,#a0d9cc)}/* Sea glass */
+93.33333333%,99.58333333%{--cloud-core:var(--palette-core-14,#473451);--cloud-glint:var(--palette-glint-14,#d3afe3)}/* Amethyst */
+100%{--cloud-core:var(--palette-next-core,#115357);--cloud-glint:var(--palette-next-glint,#5eddd1)}}
 @media(max-width:600px){.space-background:after{animation:cloud-palette-cycle 2880s linear infinite}}
 @media(prefers-reduced-motion:reduce){.space-background:after{animation:none!important;--cloud-core:#115357;--cloud-glint:#5eddd1}}
 /* Borderless surfaces: fills and spacing carry the layout. */

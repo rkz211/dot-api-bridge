@@ -58,7 +58,7 @@ For Cookiejar publishing, prefer the [dedicated flow](agent-handoff.md#cookiejar
 
 ## Interface and motion
 
-The setup page uses a black, borderless interface with neutral selected and Ready states. A blended wormhole, thin prism rim, and sparse inward particles sit behind the stationary controls. Fifteen jewel cloud palettes include a saturated orange; each holds for three minutes and blends for twelve seconds, for a 48-minute loop. Reloading starts the cycle from teal.
+The setup page uses a black, borderless interface with neutral selected and Ready states. A blended wormhole, thin prism rim, and sparse inward particles sit behind the stationary controls. Fifteen jewel cloud palettes include brighter orange, emerald, sapphire, violet, crimson, and yellow. Each shuffled bag uses every palette once, then reshuffles without repeating a color across the boundary. Each color holds for three minutes and blends for twelve seconds, so one bag lasts 48 minutes. Reloading starts a fresh shuffle. Yellow uses the same cloud treatment as every other color, with no separate portal light patch.
 
 Mouse movement briefly energizes the existing background along its recent path. Faster motion produces stronger light, with a bounded 1.15-second fade. The effect uses twelve reusable traces and event-driven updates, with no idle animation loop, pointer storage, external assets, or sensor permissions. It does not move the page or portal. Touch devices and Reduced Motion disable the pointer effect; Reduced Motion also keeps the cloud palette static.
 
