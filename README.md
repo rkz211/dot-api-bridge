@@ -56,6 +56,12 @@ Generic connections do not need endpoint-by-endpoint business mappings. The agen
 
 For Cookiejar publishing, prefer the [dedicated flow](agent-handoff.md#cookiejar-publishing). Its source ZIP limit is 512 KiB. Starting a build does not establish that a site is live; the caller must follow status and verify the result.
 
+## Interface and motion
+
+The setup page uses a black, borderless interface with neutral selected and Ready states. A blended wormhole, thin prism rim, and sparse inward particles sit behind the stationary controls. Fifteen jewel cloud palettes include a saturated orange; each holds for three minutes and blends for twelve seconds, for a 48-minute loop. Reloading starts the cycle from teal.
+
+Mouse movement briefly energizes the existing background along its recent path. Faster motion produces stronger light, with a bounded 1.15-second fade. The effect uses twelve reusable traces and event-driven updates, with no idle animation loop, pointer storage, external assets, or sensor permissions. It does not move the page or portal. Touch devices and Reduced Motion disable the pointer effect; Reduced Motion also keeps the cloud palette static.
+
 ## Storage and trust
 
 Keep the Site owner-private and retain Sites-managed authentication. The platform's owner-only access policy authorizes the managed caller. This worker does not isolate multiple owners' keys or operation records and must not be exposed directly where callers can forge identity headers.

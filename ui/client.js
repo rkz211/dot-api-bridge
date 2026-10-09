@@ -233,7 +233,7 @@
   }
   function renderReady(connection, body) {
     const box = node('div', 'ready-box');
-    const mark = node('span', 'ready-mark', 'OK'); mark.setAttribute('aria-hidden', 'true');
+    const mark = node('span', 'ready-mark'); mark.setAttribute('aria-hidden', 'true');
     const copy = node('div');
     copy.append(node('p', 'ready-title', connection.lastTest?.ok === true ? 'Connection checked' : 'Ready for your dot'));
     copy.append(node('p', 'ready-copy', connection.source === 'hosted' ? 'This connection is already provided by the bridge. There’s no need to enter a key.' : connection.lastTest?.ok === true ? 'Your connection is ready to use. Your key will stay hidden.' : connection.lastTest?.message || 'The connection is saved. A verified API check hasn’t been run.'));
@@ -464,4 +464,36 @@
   window.addEventListener('pagehide', () => { const input = $('api-key'); if (input) input.value = ''; });
   window.addEventListener('pageshow', (event) => { if (event.persisted) { const input = $('api-key'); if (input) input.value = ''; loadConnections(); } });
   render(); loadConnections();
+})();
+
+// Event-driven energy: a fixed pool, no idle loop, storage, or sensor access.
+(() => {
+  const background = document.getElementById('space-background');
+  if (!background || !window.matchMedia) return;
+  const motion = window.matchMedia('(prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine)');
+  const layer = document.createElement('div'); layer.className = 'space-energy'; background.append(layer);
+  const traces = Array.from({ length: 12 }, () => { const el = document.createElement('span'); el.className = 'space-energy-trace'; layer.append(el); return el; });
+  let previous = null, lastPaint = -Infinity, index = 0;
+  const reset = () => { previous = null; lastPaint = -Infinity; for (const el of traces) delete el.dataset.flash; };
+  window.addEventListener('pointermove', event => {
+    if (!motion.matches || document.hidden || event.pointerType !== 'mouse') { reset(); return; }
+    const point = { x: event.clientX, y: event.clientY, t: event.timeStamp };
+    if (!Number.isFinite(point.x + point.y + point.t)) return;
+    if (!previous || point.t - previous.t > 160) { previous = point; return; }
+    if (point.t - lastPaint < 32) return;
+    const dx = point.x - previous.x, dy = point.y - previous.y;
+    const distance = Math.hypot(dx, dy), elapsed = Math.max(8, point.t - previous.t);
+    if (distance < 2) return;
+    const length = Math.min(distance, 180), speed = Math.min(2.5, distance / elapsed);
+    const el = traces[index++ % traces.length];
+    el.style.width = (length + 100).toFixed(1) + 'px';
+    el.style.transform = 'translate(' + (point.x - dx * length / distance - 50).toFixed(1) + 'px,' + (point.y - dy * length / distance - 50).toFixed(1) + 'px) rotate(' + Math.atan2(dy, dx).toFixed(4) + 'rad)';
+    el.style.setProperty('--energy', (.12 + speed * .22).toFixed(3));
+    el.dataset.flash = el.dataset.flash === 'a' ? 'b' : 'a';
+    previous = point; lastPaint = point.t;
+  }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', reset);
+  window.addEventListener('blur', reset);
+  document.addEventListener('visibilitychange', reset);
+  motion.addEventListener('change', reset);
 })();

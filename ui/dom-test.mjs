@@ -44,7 +44,7 @@ const fixtures=()=>[
 {id:'first',name:'Example Service',description:'Read your work.',keyHelpUrl:'https://example.com/keys',keyHelpText:'Create an API key in your provider account.',accessDescription:'Read permitted documents.',baseUrl:'https://api.example.com/v1',authLabel:'Authorization: Bearer token',binding:'binding-1',status:'needs_key',source:'none',lastTest:null,canSave:true},
 {id:'hosted',name:'Hosted Service',description:'Already prepared.',accessDescription:'Read public updates.',baseUrl:'https://api.example.com/v2',authLabel:'X-API-Key',binding:'binding-2',status:'ready',source:'hosted',lastTest:{ok:true,message:'Checked',at:'2026-10-08T18:00:00Z'},canSave:true}];
 async function setup(mode='default',searchQuery=''){
-  const document=new Document();
+  const document=new Document(); document.documentElement=document;
   for(const [tag,id] of [['div','connection-list'],['div','connection-panel'],['input','service-search'],['div','network-banner'],['span','connection-count'],['div','announcer'],['div','space-background']]){const el=document.createElement(tag);el.id=id;document.append(el);}
   let connections=fixtures();if(mode==='empty')connections=[];if(mode==='attention'){connections[0].status='needs_attention';connections[0].source='saved';connections[0].lastTest={ok:false,message:'Check key permissions.'};}if(mode==='xss')connections[0].name='<img onerror=alert(1)>';
   const requests=[],copied=[],windowEvents={};
@@ -64,7 +64,7 @@ async function setup(mode='default',searchQuery=''){
     else {c.status='ready';if(action==='key')c.source='saved';c.lastTest=mode==='untested'?null:{ok:true,message:'Connection checked'};}
     return{ok:true,status:200,json:async()=>({connection:c,message:'Completed'})};
   };
-  const window={addEventListener:(name,handler)=>{(windowEvents[name]??=[]).push(handler);},matchMedia:()=>({matches:mode==='reduced-motion'})};
+  const window={addEventListener:(name,handler)=>{(windowEvents[name]??=[]).push(handler);},matchMedia:()=>({matches:mode==='reduced-motion',addEventListener(){}})};
   const context={document,navigator,window,location:{origin:'https://private-bridge.example',search:searchQuery},URL,fetch,AbortController,setTimeout,clearTimeout,Date,console};
   vm.runInNewContext(readFileSync(new URL('./client.js',import.meta.url),'utf8'),context);
   const settle=async()=>{for(let i=0;i<5;i++)await new Promise(setImmediate);};await settle();

@@ -72,3 +72,7 @@ Existing hosted-secret connections are an optional compatibility fallback, not a
 Report source checks, private deployment/access control, database readiness, plugin connection, managed authentication, key setup, and authenticated provider reads separately. Name exactly what was tested. Any create, upload, deploy, or domain change is a separate live action requiring its own applicable approval and result verification. Local tests and visible tools do not prove a live publish.
 
 The agent should return the verified private setup link and the smallest remaining owner action. Do not hand unfinished authorized implementation back to the owner as a vague instruction to build an adapter.
+
+## Background effects
+
+The clouds hold each of 15 colors for three minutes, then blend for twelve seconds. Refreshing restarts at teal. Mouse movement adds a short fading light to the existing background; faster movement makes it stronger. Controls stay still. Touch devices do not use this effect, and your system's Reduced Motion preference disables it and keeps the cloud color static. No extra settings or permissions are required.

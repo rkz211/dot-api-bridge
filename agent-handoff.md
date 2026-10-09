@@ -126,3 +126,9 @@ There is no write-enable flag to toggle. If the owner requires server-enforced r
 ## Handoff to the owner
 
 Give the verified private setup link, the exact remaining owner action if any, and the checks actually completed. Distinguish source tests, UI checks, private deployment, native storage, plugin connection, managed authentication, saved-key status, authenticated reads, and any particular live write. Local synthetic checks and previous private-runtime reads do not verify a fresh public-source deployment or a live publish. Keep caller IDs, credentials, private records, and signed URLs out of public reports.
+
+## Preserving the interface when updating
+
+Edit `ui/template.html`, `ui/styles.css`, and `ui/client.js`; regenerate `ui.mjs` with the build. Keep input panels stationary, preserve keyboard focus and neutral Ready/selection states, and retain reduced-motion and touch fallbacks. The cloud cycle is 15 presets, each 180 seconds plus a 12-second blend (2880 seconds total). The pointer effect is velocity-driven light only, with no parallax.
+
+Run `npm test`, `npm run check`, and `npm run build`. The palette tests verify dwell, wrap, neighboring hue differences, and contrast; effect tests verify bounded velocity response, trace reuse, hidden-page reset, and touch/reduced-motion guards. Browser-check desktop and narrow layouts with synthetic connections. Verify that light fades after pointer movement and controls remain fixed. Automated fixtures are not evidence of another owner's live credentials or provider access.
