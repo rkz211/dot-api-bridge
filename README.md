@@ -54,7 +54,7 @@ The saved API destination, authentication format, and key are authoritative. No 
 
 Generic connections do not need endpoint-by-endpoint business mappings. The agent supplies a relative path, method, optional query, and a bounded JSON/text/base64 body within the saved API base URL. Ordinary generic GET/HEAD requests use the read tool; other supported methods use the conservative write tool. The available tool is not authorization: user approval requirements still apply to each action.
 
-For Cookiejar publishing, prefer the [dedicated flow](agent-handoff.md#cookiejar-publishing). Its source ZIP limit is 512 KiB. Starting a build does not establish that a site is live; the caller must follow status and verify the result.
+For Cookiejar publishing, prefer the [dedicated flow](agent-handoff.md#cookiejar-publishing). Its source ZIP limit is 512 KiB. All write and operation-status calls require lowercase UUID operation IDs; descriptive labels are rejected before provider calls. For larger unchanged archives, see the [documented direct-upload handoff](agent-handoff.md#operation-ids-and-larger-cookiejar-source-archives). Starting a build does not establish that a site is live; the caller must follow status and verify the result.
 
 ## Interface and motion
 

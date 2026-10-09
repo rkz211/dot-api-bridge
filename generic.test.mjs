@@ -73,3 +73,16 @@ test('base64 decoded body enforces exact 512 KiB cap despite padding rounding',(
  assert.equal(decodeBody(Buffer.alloc(512*1024).toString('base64')).length,512*1024);
  assert.throws(()=>decodeBody(Buffer.alloc(512*1024+1).toString('base64')));
 });
+
+test('invalid operation IDs give safe actionable errors before storage, credential resolution or upstream calls',async()=>{
+ let calls=0,dbCalls=0;const h=createHandler(()=>{calls++;throw Error('must not fetch')});
+ for(const [name,args] of [
+ ['bridge_api_write',{serviceId:'cookiejar',method:'POST',path:'/sites',bodyJson:{name:'Example'},operationId:'example-create-one'}],
+ ['cookiejar_create_site',{name:'Example',operationId:'example-create-two'}],
+ ['bridge_operation_status',{operationId:'example-create-three'}],
+ ['cookiejar_operation_status',{operationId:'ABCDEFAB-1234-1234-1234-123456789ABC'}]]){
+  const req=new Request('https://bridge.invalid/mcp',{method:'POST',headers:{'content-type':'application/json','oai-authenticated-user-id':'test-owner'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})});
+  const result=await(await h(req,{DB:{prepare(){dbCalls++;throw Error('must not query')}}})).json();assert.equal(result.error.code,-32602);assert.match(result.error.message,/lowercase UUID/);assert.match(result.error.message,/before any provider call/);
+ }
+ assert.equal(calls,0);assert.equal(dbCalls,0);
+});

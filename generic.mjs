@@ -7,7 +7,7 @@ const ALLOWED_HEADERS=new Set(['content-type','accept','if-match','if-none-match
 const schema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const common={serviceId:{type:'string',pattern:'^[a-z][a-z0-9_-]{1,63}$'},path:{type:'string',description:'Absolute relative path beginning with one slash; no host, query, fragment, traversal, or encoded path separators.'},siteId:{type:'string',pattern:ID.source},query:{type:'object',additionalProperties:{type:['string','number','boolean']}},headers:{type:'object',additionalProperties:{type:'string'}}};
 const body={bodyJson:{},bodyText:{type:'string'},bodyBase64:{type:'string'}};
-const op={operationId:{type:'string',format:'uuid'}};
+const op={operationId:{type:'string',format:'uuid',pattern:UUID.source,description:'Required lowercase UUID, for example 12345678-1234-1234-1234-123456789abc. Reuse the same UUID for this action and its status checks; descriptive labels are not valid.'}};
 export const GENERIC_TOOLS=[
  {name:'bridge_operation_status',description:'Read a durable operation outcome without retrying its external action.',inputSchema:schema({...op},['operationId']),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
  {name:'bridge_services',description:'List configured service readiness and credential-management restrictions. Never returns credential values.',inputSchema:schema({}),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},

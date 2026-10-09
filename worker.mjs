@@ -71,6 +71,7 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
     const tool = TOOLS.find(t => t.name === name);
     if (!tool) return error(id, -32602, 'Unknown tool');
     if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(k => !Object.hasOwn(tool.inputSchema.properties, k)) || tool.inputSchema.required.some(k => args[k] === undefined)) return error(id, -32602, 'Invalid arguments');
+    if (Object.entries(tool.inputSchema.properties).some(([key, spec]) => spec.format === 'uuid' && (typeof args[key] !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(args[key])))) return error(id, -32602, 'operationId must be a lowercase UUID. This request was rejected before any provider call or operation record was created. Use one stable UUID for the action and its status checks.');
     if (name === CONNECTION.name) return result(id, {content: [{type: 'text', text: JSON.stringify({authenticated: true, authentication: 'sites-managed', userId: user})}], isError: false});
     if(CONNECTION_TOOLS.some(t=>t.name===name)){try{const data=name==='bridge_prepare_connection'?await prepareConnection(args,env):await listConnections(env);if(data.setupPath)data.setupUrl=new URL(data.setupPath,request.url).href;return result(id,{content:[{type:'text',text:JSON.stringify(data)}],isError:false});}catch(cause){return error(id,-32008,cause instanceof ConnectionError?cause.message:'Connection storage is unavailable. No successful change is confirmed.');}}
     try {
