@@ -145,3 +145,9 @@ Both `cookiejar_deploy_site` and `bridge_api_upload` accept at most 512 KiB of d
 4. If any mutation is uncertain, reconcile its existing operation/deployment state before retrying. If the direct upload environment or required authorization is unavailable, report that specific blocker rather than attempting a larger MCP payload.
 
 The direct upload procedure depends on the provider's current contract and the caller's environment; it is not an extra streaming or multipart capability implemented by this repository.
+
+## Per-service filtering configuration
+
+`bridge_prepare_connection` accepts optional `filtering: {enabled: boolean, paths: string[], actions: string[]}`. New custom connections default to `{enabled:false, paths:[], actions:[]}`. Omit this field when updating existing metadata to preserve its current policy; do not silently disable a user's existing filters. The private UI exposes the same setting under Connection details, saved through the existing authenticated connection action route with its revision binding.
+
+With filtering off, `bridge_api_write` does not require enumerating new RPC actions. Verified POST read classification remains separate. With filtering on, exact path and case-insensitive JSON-action allowlists apply; GET/HEAD use paths only, and enabling requires a nonempty path or action list. Known credential/transport guards always apply. See [policy semantics and migration](SETUP.md#optional-api-call-filtering).

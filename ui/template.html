@@ -19,7 +19,7 @@
   <span class="private-label"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.4"/></svg>Private setup</span>
 </header>
 <main id="main">
-  <div class="page-heading"><p class="eyebrow">YOUR CONNECTIONS</p><h1>What do you want to connect?</h1><p class="intro">Choose a service, add its key, then tell your dot what to do.</p></div>
+  <div class="page-heading"><p class="eyebrow">YOUR CONNECTIONS</p><h1>What do you want to connect?</h1><p class="intro">Choose New service to enter a name, endpoint, and key. Save &amp; test, then tell your dot what to do.</p></div>
   <div id="network-banner" class="banner banner-warning" role="status" hidden></div>
   <section class="intent-section" aria-label="Find a service">
     <label for="service-search" class="field-label">Service name or website</label>
@@ -28,9 +28,10 @@
   </section>
   <div class="workspace">
     <aside class="connection-sidebar" aria-label="Prepared services">
+      <button id="new-service" type="button" class="btn btn-primary" disabled>New service</button>
       <div class="section-heading"><h2>Prepared services</h2><span id="connection-count" class="count">0</span></div>
       <div id="connection-list" class="connection-list" aria-busy="true"></div>
-      <div class="sidebar-help"><span class="small-icon" aria-hidden="true">?</span><p>Don’t see your service?<br>Type its name above to get started.</p></div>
+      <div class="sidebar-help"><span class="small-icon" aria-hidden="true">?</span><p>Don’t see your service?<br>Choose New service to add it directly.</p></div>
     </aside>
     <section id="connection-panel" class="connection-panel" aria-label="Connection details" aria-busy="true"></section>
   </div>

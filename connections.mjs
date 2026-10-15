@@ -1,16 +1,16 @@
 import {SERVICES} from './services.mjs';
 import {digest} from './helpers.mjs';
-import {genericCall} from './generic.mjs';
+import {genericCall,normalizeFiltering} from './generic.mjs';
 const ID=/^[a-z][a-z0-9_-]{1,63}$/;
 const RESERVED=new Set(['constructor','prototype','__proto__']);
 const FORBIDDEN_HEADERS=new Set(['host','cookie','set-cookie','origin','referer','content-length','content-type','connection','transfer-encoding','x-site']);
 const BLOCKED_ROOTS=['key','admin','env','auth','oauth','credentials','tokens','secrets','password'];
-const META_KEYS=['id','name','description','baseUrl','authHeader','authPrefix','keyHelpUrl','keyHelpText','accessDescription','sourceUrl','testRequest'];
+const META_KEYS=['id','name','description','baseUrl','authHeader','authPrefix','keyHelpUrl','keyHelpText','accessDescription','sourceUrl','testRequest','filtering'];
 const now=()=>new Date().toISOString();
 const schema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const string={type:'string'};
 export const CONNECTION_TOOLS=[
- {name:'bridge_prepare_connection',description:'Prepare non-secret connection details from verified official website/API/agent documentation. Never supply a key. The owner reviews the destination and enters their key privately in the setup page. Does not enable access or send a provider request. Generic requests do not need business-endpoint mappings.',inputSchema:schema({id:string,name:string,description:string,baseUrl:string,authHeader:string,authPrefix:string,keyHelpUrl:string,keyHelpText:string,accessDescription:string,sourceUrl:string,testRequest:{type:'object'}},['name','baseUrl','authHeader','authPrefix','accessDescription']),annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
+ {name:'bridge_prepare_connection',description:'Prepare non-secret connection details from verified official website/API/agent documentation. Never supply a key. The owner reviews the destination and enters their key privately in the setup page. Does not enable access or send a provider request. Generic requests do not need business-endpoint mappings. New custom connections default API-call filtering off; omit filtering on existing connections to preserve their policy.',inputSchema:schema({id:string,name:string,description:string,baseUrl:string,authHeader:string,authPrefix:string,keyHelpUrl:string,keyHelpText:string,accessDescription:string,sourceUrl:string,testRequest:{type:'object'},filtering:schema({enabled:{type:'boolean'},paths:{type:'array',items:{type:'string'}},actions:{type:'array',items:{type:'string'}}},['enabled'])},['name','baseUrl','authHeader','authPrefix','accessDescription']),annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
  {name:'bridge_connection_status',description:'Read safe connection readiness and setup links. Never returns saved keys, key fragments, or raw provider responses.',inputSchema:schema({}),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}}
 ];
 export class ConnectionError extends Error{constructor(message,status=400,code='connection_input',providerStatus=null){super(message);this.status=status;this.code=code;this.providerStatus=providerStatus;}}
@@ -26,7 +26,7 @@ export async function bindingOf(config){return digest(new TextEncoder().encode(J
 function envBase(service,env){return service.baseUrlEnv?env[service.baseUrlEnv]:service.baseUrl;}
 function builtinConfig(id,service,env){
  const base=envBase(service,env);if(!base)return null;
- return {id,name:service.displayName||id,description:service.description||'Connect this service so your dot can use it when you ask.',baseUrl:base.replace(/\/$/,''),authHeader:service.authHeader,authPrefix:service.authPrefix||'',keyHelpUrl:service.keyHelpUrl||'',keyHelpText:service.keyHelpText||'Ask your dot to find the official instructions for getting a key. Never paste a key into chat.',accessDescription:service.accessDescription||'The bridge can make requests permitted by this key. Your dot must still follow your instructions and approval requirements.',sourceUrl:service.sourceUrl||'',testRequest:service.testRequest||null};
+ return {id,name:service.displayName||id,description:service.description||'Connect this service so your dot can use it when you ask.',baseUrl:base.replace(/\/$/,''),authHeader:service.authHeader,authPrefix:service.authPrefix||'',keyHelpUrl:service.keyHelpUrl||'',keyHelpText:service.keyHelpText||'Ask your dot to find the official instructions for getting a key. Never paste a key into chat.',accessDescription:service.accessDescription||'The bridge can make requests permitted by this key. Your dot must still follow your instructions and approval requirements.',sourceUrl:service.sourceUrl||'',testRequest:service.testRequest||null,...(service.filtering!==undefined?{filtering:service.filtering}:{})};
 }
 export function connectionStore(db){
  if(!db)throw new ConnectionError('Connection storage is unavailable. Try again later.',503);
@@ -36,17 +36,18 @@ export function connectionStore(db){
   async prepare(id,config,binding){const r=await db.prepare("INSERT INTO bridge_connections (service_id, config_json, binding_hash, state, revision, updated_at) VALUES (?, ?, ?, 'prepared', ?, ?) ON CONFLICT(service_id) DO UPDATE SET config_json = excluded.config_json, revision = excluded.revision, updated_at = excluded.updated_at WHERE bridge_connections.binding_hash = excluded.binding_hash").bind(id,JSON.stringify(config),binding,crypto.randomUUID(),now()).run();if(r.meta?.changes!==1)throw new ConnectionError('Use a new connection name for a different API destination. Existing keys are never retargeted.',409);},
   async save(id,config,binding,key,lastTest,expectedRevision){const r=await db.prepare("INSERT INTO bridge_connections (service_id, config_json, binding_hash, state, key_value, last_test_json, revision, updated_at) VALUES (?, ?, ?, 'active', ?, ?, ?, ?) ON CONFLICT(service_id) DO UPDATE SET key_value = excluded.key_value, state = 'active', last_test_json = excluded.last_test_json, revision = excluded.revision, updated_at = excluded.updated_at WHERE bridge_connections.binding_hash = excluded.binding_hash AND bridge_connections.revision = ?").bind(id,JSON.stringify(config),binding,key,JSON.stringify(lastTest),crypto.randomUUID(),now(),expectedRevision).run();if(r.meta?.changes!==1)throw new ConnectionError('Connection details changed. Reload before saving a key.',409);},
   async disable(id,config,binding,expectedRevision){const r=await db.prepare("INSERT INTO bridge_connections (service_id, config_json, binding_hash, state, key_value, revision, updated_at) VALUES (?, ?, ?, 'disabled', NULL, ?, ?) ON CONFLICT(service_id) DO UPDATE SET key_value = NULL, state = 'disabled', last_test_json = NULL, revision = excluded.revision, updated_at = excluded.updated_at WHERE bridge_connections.binding_hash = excluded.binding_hash AND bridge_connections.revision = ?").bind(id,JSON.stringify(config),binding,crypto.randomUUID(),now(),expectedRevision).run();if(r.meta?.changes!==1)throw new ConnectionError('Connection details changed. Reload and try again.',409);},
+  async updateFiltering(id,config,binding,expectedRevision){const r=await db.prepare("INSERT INTO bridge_connections (service_id, config_json, binding_hash, state, revision, updated_at) VALUES (?, ?, ?, 'prepared', ?, ?) ON CONFLICT(service_id) DO UPDATE SET config_json = excluded.config_json, revision = excluded.revision, updated_at = excluded.updated_at WHERE bridge_connections.binding_hash = excluded.binding_hash AND bridge_connections.revision = ?").bind(id,JSON.stringify(config),binding,crypto.randomUUID(),now(),expectedRevision).run();if(r.meta?.changes!==1)throw new ConnectionError('Connection details changed. Reload before changing filtering.',409);},
   async recordTest(id,lastTest,expectedRevision){const r=await db.prepare('UPDATE bridge_connections SET last_test_json = ?, updated_at = ? WHERE service_id = ? AND revision = ?').bind(JSON.stringify(lastTest),now(),id,expectedRevision).run();if(r.meta?.changes!==1)throw new ConnectionError('Connection details changed. Reload before testing again.',409);}
  };
 }
 function parseRow(row){if(!row)return null;try{return {...row,config:JSON.parse(row.config_json),lastTest:row.last_test_json?JSON.parse(row.last_test_json):null};}catch{throw new ConnectionError('A connection needs repair. Ask your dot to check its saved configuration.',503);}}
-function dynamicService(config){return {enabled:true,baseUrl:config.baseUrl,credentialEnv:`BRIDGE_SAVED_${config.id}`,enableEnv:`BRIDGE_ENABLED_${config.id}`,authHeader:config.authHeader,authPrefix:config.authPrefix,blockedRoots:BLOCKED_ROOTS,blockedSegments:['rotate'],rpc:false};}
+function dynamicService(config){return {enabled:true,baseUrl:config.baseUrl,credentialEnv:`BRIDGE_SAVED_${config.id}`,enableEnv:`BRIDGE_ENABLED_${config.id}`,authHeader:config.authHeader,authPrefix:config.authPrefix,blockedRoots:BLOCKED_ROOTS,blockedSegments:['rotate'],rpc:false,...(config.filtering!==undefined?{filtering:config.filtering}:{})};}
 function savedService(config){
  const builtin=Object.hasOwn(SERVICES,config.id)?SERVICES[config.id]:null;
  if(!builtin)return dynamicService(config);
  if(config.authHeader.toLowerCase()!==builtin.authHeader.toLowerCase()||config.authPrefix!==builtin.authPrefix||(!builtin.baseUrlEnv&&config.baseUrl!==builtin.baseUrl.replace(/\/$/,'')))throw new ConnectionError('The saved destination or authentication differs from this connection.',409);
  safeUrl(config.baseUrl,{base:true});
- return {...builtin,baseUrl:config.baseUrl,baseUrlEnv:undefined};
+ return {...builtin,baseUrl:config.baseUrl,baseUrlEnv:undefined,...(config.filtering!==undefined?{filtering:config.filtering}:{})};
 }
 async function getConfig(id,env,store){
  if(typeof id!=='string'||!ID.test(id)||RESERVED.has(id))throw new ConnectionError('That connection was not found.',404);
@@ -64,6 +65,11 @@ export async function prepareConnection(args,env,storeOverride){
  const binding=await bindingOf(config),builtin=Object.hasOwn(SERVICES,id)?builtinConfig(id,SERVICES[id],env):null;
  savedService(config);
  const store=storeOverride||connectionStore(env.DB);const rows=await store.listMeta();if(rows.length>=100&&!rows.some(r=>r.service_id===id))throw new ConnectionError('This bridge has reached its connection limit.',409);
+ const existing=rows.find(r=>r.service_id===id);
+ if(args.filtering!==undefined){try{config.filtering=normalizeFiltering(args.filtering);}catch{throw new ConnectionError('Invalid API-call filtering settings.');}}
+ else if(existing){const prior=parseRow(existing).config;if(prior.filtering!==undefined)config.filtering=prior.filtering;}
+ else if(builtin?.filtering!==undefined)config.filtering=builtin.filtering;
+ else if(!builtin)config.filtering={enabled:false,paths:[],actions:[]};
  await store.prepare(id,config,binding);return {id,name,prepared:true,setupPath:`/?connect=${encodeURIComponent(id)}`,message:'Connection details are ready. Open the private setup page to review the destination and add your key.'};
 }
 export async function listConnections(env,storeOverride){
@@ -71,7 +77,8 @@ export async function listConnections(env,storeOverride){
  for(const id of ids){const row=map.get(id),service=SERVICES[id],config=row?.config||(service?builtinConfig(id,service,env):null);if(!config)continue;const binding=await bindingOf(config);savedService(config);if(row&&binding!==row.binding_hash)throw new ConnectionError('A connection has invalid settings.',503);
   const hostedBase=service?builtinConfig(id,service,env):null;const hosted=Boolean(service&&hostedBase&&await bindingOf(hostedBase)===binding&&env[service.credentialEnv]&&(!service.enableEnv||env[service.enableEnv]==='true')),saved=Boolean(row?.state==='active'&&row.has_key),disabled=row?.state==='disabled';
   const configured=!disabled&&(saved||hosted);const lastTest=row?.lastTest||null;
-  connections.push({...config,binding:`${binding}:${row?.revision||'initial'}`,authLabel:config.authPrefix.trim()?`${config.authPrefix.trim()} key`:`Key in ${config.authHeader}`,status:disabled?'disabled':configured?(lastTest?.ok===false?'needs_attention':'ready'):'needs_key',source:disabled?'none':saved?'saved':hosted?'hosted':'none',lastTest,canSave:true});
+  const effective=savedService(config),filtering=effective.filtering??(effective.rpc?{enabled:true,paths:['/'],actions:[...effective.readActions,...effective.writeActions]}:{enabled:false,paths:[],actions:[]});
+  connections.push({...config,filtering,filteringLegacy:effective.filtering===undefined&&Boolean(effective.rpc),binding:`${binding}:${row?.revision||'initial'}`,authLabel:config.authPrefix.trim()?`${config.authPrefix.trim()} key`:`Key in ${config.authHeader}`,status:disabled?'disabled':configured?(lastTest?.ok===false?'needs_attention':'ready'):'needs_key',source:disabled?'none':saved?'saved':hosted?'hosted':'none',lastTest,canSave:true});
  }
  return {connections,storageAvailable:true};
 }
@@ -95,9 +102,12 @@ async function runCheck(config,env,key,fetcher){
  catch{const code=!started?'check_configuration':received?'provider_response':'provider_network';return {ok:false,status:null,code,at:now(),message:code==='check_configuration'?'The bridge could not prepare the provider check. Ask your dot to repair the connection setup.':code==='provider_response'?'The provider responded, but the bridge could not safely process its response. Ask your dot to check the integration.':'The provider check could not complete because of a connection error or timeout. Try later.'};}
 }
 export async function connectionAction(id,action,args,env,fetcher,storeOverride){
- const store=storeOverride||connectionStore(env.DB);const {config,binding,proof,row}=await getConfig(id,env,store);const allowed=action==='key'?['key','expectedBinding','test']:['expectedBinding'];if(!args||typeof args!=='object'||Array.isArray(args)||Object.keys(args).some(k=>!allowed.includes(k))||args.expectedBinding!==proof)throw new ConnectionError('Connection details changed. Reload before continuing.',409);
+ const store=storeOverride||connectionStore(env.DB);const {config,binding,proof,row}=await getConfig(id,env,store);const allowed=action==='key'?['key','expectedBinding','test']:action==='filtering'?['filtering','expectedBinding']:['expectedBinding'];if(!args||typeof args!=='object'||Array.isArray(args)||Object.keys(args).some(k=>!allowed.includes(k))||args.expectedBinding!==proof)throw new ConnectionError('Connection details changed. Reload before continuing.',409);
  let message;
- if(action==='key'){
+ if(action==='filtering'){
+  let filtering;try{filtering=normalizeFiltering(args.filtering);}catch{throw new ConnectionError('Use valid allowed paths or actions before enabling filtering.');}
+  await store.updateFiltering(id,{...config,filtering},binding,row?.revision||null);message='API-call filtering saved.';
+ }else if(action==='key'){
   if(typeof args.key!=='string'||args.key.length<1||args.key.length>8192||/[\x00-\x20\x7f]/.test(args.key))throw new ConnectionError('Paste only the key itself, with no spaces or extra lines.',400,'key_format');
   const check=args.test===false?{ok:null,status:null,at:now(),message:'Key saved. Ask your dot to test a request.'}:await runCheck(config,env,args.key,fetcher);
   if(check.ok===false)throw new ConnectionError(check.message+' Nothing was changed.',422,check.code,check.status);

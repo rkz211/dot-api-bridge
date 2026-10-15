@@ -64,12 +64,23 @@
   const actionLabel = (label, action) => state.pending?.action === action ? (action === 'key' ? 'Saving & checking…' : action === 'test' ? 'Checking connection…' : action === 'disconnect' ? 'Disconnecting…' : 'Preparing…') : label;
   const applyBusy = () => {
     search.disabled = isBusy();
+    $('new-service').disabled = isBusy() || state.loading || state.offline || state.loadError || !state.storageAvailable;
     list.querySelectorAll('button').forEach((b) => { b.disabled = isBusy(); });
     panel.querySelectorAll('button,input,select,textarea').forEach((control) => {
       if (isBusy() && !control.disabled) { control.disabled = true; control.dataset.busyDisabled = 'true'; }
     });
     panel.setAttribute('aria-busy', String(isBusy() || state.loading));
   };
+  function filteringFields(container, value = { enabled: false, paths: [], actions: [] }) {
+    const label = node('label', 'destination-check'); const enabled = node('input'); enabled.type = 'checkbox'; enabled.id = 'filter-enabled'; enabled.checked = value.enabled;
+    label.append(enabled, node('span', '', 'Filter API calls')); container.append(label);
+    const fields = node('div'); fields.hidden = !enabled.checked;
+    const paths = field(fields, 'Allowed paths', 'filter-paths', 'textarea', false, 'Exact relative paths, one per line. Empty means any safe path.'); paths.value = value.paths.join('\n');
+    const actions = field(fields, 'Allowed JSON actions', 'filter-actions', 'textarea', false, 'Values of the JSON action field, one per line (case-insensitive). Applies to writes; GET/HEAD use path filtering. Empty means any action.'); actions.value = value.actions.join('\n');
+    container.append(fields, node('p', 'field-hint', 'Off by default for new services. Authentication, destination binding, credential protections, and transport safeguards always apply.'));
+    enabled.addEventListener('change', () => { fields.hidden = !enabled.checked; });
+    return () => ({ enabled: enabled.checked, paths: paths.value.split('\n').map(x => x.trim()).filter(Boolean), actions: actions.value.split('\n').map(x => x.trim()).filter(Boolean) });
+  }
   const advancedDetails = (connection) => {
     const details = node('details', 'advanced');
     details.append(node('summary', '', 'Connection details'));
@@ -82,7 +93,12 @@
       const time = new Date(connection.lastTest.at);
       if (Number.isFinite(time.getTime())) body.append(node('p', 'field-hint', 'Last check: ' + time.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })));
     }
-    details.append(body);
+    const form = node('form', 'filtering-form');
+    if (connection.filteringLegacy) form.append(node('p', 'field-hint', 'Existing RPC restrictions are preserved. Save here to explicitly replace them with your filtering settings.'));
+    const readFiltering = filteringFields(form, connection.filtering);
+    const save = node('button', 'btn', 'Save filtering'); save.type = 'submit'; save.disabled = state.offline || state.loadError || isBusy(); form.append(save);
+    form.addEventListener('submit', event => { event.preventDefault(); if (!isBusy()) mutate(connection, 'filtering', { filtering: readFiltering() }); });
+    body.append(form); details.append(body);
     return details;
   };
   const copyButton = (text, label, container) => {
@@ -323,21 +339,86 @@
       const warning = banner('That looks like a key. It was cleared from the search box. Choose a service first, then paste it into that service’s private key box.', 'warning'); warning.setAttribute('role', 'alert');
       body.append(warning, node('p', 'small-copy', 'Nothing was sent or saved. Service names, websites, and agent-instructions links go in the search box. API keys belong only in the hidden key field.')); panel.append(body); return;
     }
-    const value = intent();
-    panel.append(heading(value ? 'Let’s prepare your connection' : 'Start with a service', value ? 'Your dot can handle the API details. You’ll add the key here when it’s ready.' : 'You don’t need to know how an API works to get started.', null, 'A LITTLE SETUP, THEN YOU’RE CONNECTED'));
+    panel.append(heading('Connect a new service', 'Choose New service, enter a name, endpoint, and key, then save and test.', null, 'YOUR CONNECTIONS'));
     const body = node('div', 'panel-body');
-    const icon = node('div', 'empty-symbol', '+'); icon.setAttribute('aria-hidden', 'true'); body.append(icon);
-    body.append(node('h3', 'empty-title', value ? 'Ask your dot about this service' : 'Which service would you like to use?'));
-    body.append(node('p', 'unknown-text', value ? 'Copy the request below into your conversation. Your dot will look for official instructions and prepare the connection settings.' : 'Enter its name, website, or agent-instructions link above. Your dot can find the official API instructions and prepare a connection for you.'));
-    if (value) {
-      const prompt = 'I want to connect this service to my private API bridge: ' + value + '\n\nThe bridge is at ' + location.origin + '. Find and read the service’s official agent or API documentation. Confirm whether API access and keys are available to me, identify the verified provider API base URL and authentication header format, and prepare a non-secret connection draft in this bridge with a clear access description and verified key-help link. Tell me if access is restricted or unavailable. Do not ask me to paste an API key in chat. I will review the destination and enter my key in the private bridge.';
-      const row = node('div', 'button-row'); row.append(copyButton(prompt, 'Copy request for your dot', body)); body.append(row);
-      body.append(node('p', 'postscript', 'This page doesn’t discover services or run an agent. Your dot prepares the settings, then you return here.'));
-    }
-    const steps = node('ol', 'steps');
-    for (const [title, detail] of [['Your dot prepares the service.', 'It checks the official API and key instructions.'], ['You add a key privately.', 'Review the destination, then paste the key here.'], ['Ask your dot for what you need.', 'Your dot uses the prepared connection.']]) { const li = node('li'); const text = node('span'); text.append(node('strong', '', title + ' '), document.createTextNode(detail)); li.append(text); steps.append(li); }
-    body.append(steps); manualFallback(body); panel.append(body);
+    body.append(node('p', 'small-copy', 'Dot can also prepare connection details for you from official API instructions. Return here to enter your key privately when it is ready.'));
+    manualFallback(body); panel.append(body);
   }
+  function renderNewService() {
+    panel.append(heading('New service', 'Enter a name, a read-only HTTPS API endpoint, and your key.', null, 'CONNECT DIRECTLY'));
+    const body = node('div', 'panel-body');
+    const form = node('form', 'new-service-form'); form.autocomplete = 'off';
+    const name = field(form, 'Service name', 'new-name', 'text', true); name.maxLength = 80;
+    const endpoint = field(form, 'Endpoint', 'new-endpoint', 'url', true, 'Save & test sends GET to this exact URL with your key. Use a read-only API endpoint, without query parameters or embedded credentials.');
+    if (intent() && !looksLikeKey(intent())) { if (/^https:/i.test(intent())) endpoint.value = intent(); else name.value = intent().slice(0, 80); }
+    const key = field(form, 'API key', 'api-key', 'password', true, 'Sent only to the endpoint’s origin and saved on this private Site’s server after the check passes. Never paste it into chat.');
+    key.maxLength = 8192; key.autocomplete = 'new-password'; key.spellcheck = false;
+    key.setAttribute('data-1p-ignore', 'true'); key.setAttribute('data-lpignore', 'true');
+    const advanced = node('details', 'advanced'); advanced.append(node('summary', '', 'Authentication options'));
+    const options = node('div', 'advanced-content');
+    const label = node('label', 'field-label', 'Authentication'); label.htmlFor = 'new-auth';
+    const auth = node('select'); auth.id = 'new-auth';
+    for (const [value, text] of [['bearer', 'Bearer token (Authorization)'], ['api-key', 'API key (X-API-Key)'], ['custom', 'Custom header']]) { const option = node('option', '', text); option.value = value; auth.append(option); }
+    auth.value = 'bearer'; options.append(label, auth);
+    const custom = node('div'); custom.hidden = true;
+    const header = field(custom, 'Header name', 'new-header');
+    const prefix = field(custom, 'Header prefix (optional)', 'new-prefix', 'text', false, 'For example: Bearer followed by a space. Leave empty for a raw key.');
+    options.append(custom); auth.addEventListener('change', () => { custom.hidden = auth.value !== 'custom'; header.required = auth.value === 'custom'; });
+    advanced.append(options); form.append(advanced);
+    const readFiltering = filteringFields(form);
+    form.append(node('p', 'field-hint', 'Defaults to Authorization: Bearer. The endpoint’s origin becomes the API base; its path is used for the GET check. A successful response does not prove every API permission or that a public endpoint validated the key.'));
+    const error = node('p', 'field-hint'); error.setAttribute('role', 'alert'); error.hidden = true; form.append(error);
+    const actions = node('div', 'button-row'); const submit = node('button', 'btn btn-primary', 'Save & test'); submit.type = 'submit';
+    submit.disabled = state.offline || state.loadError || !state.storageAvailable || isBusy();
+    actions.append(submit, button('Cancel', '', () => { key.value = ''; state.mode = 'view'; render(); })); form.append(actions);
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault(); if (isBusy() || state.offline || state.loadError || !state.storageAvailable || !form.reportValidity()) return;
+      const fail = (message) => { error.textContent = message; error.hidden = false; };
+      const url = safeHttpsUrl(endpoint.value.trim());
+      if (!url || url.search || url.hash || /[?#\\]|%2f|%5c|%2e|%25/i.test(url.pathname)) { fail('Use a read-only HTTPS endpoint without credentials, query parameters, or a fragment.'); return; }
+      const title = name.value.trim();
+      if (!title || title.length > 80 || looksLikeKey(title)) { fail('Enter a service name, not a key.'); return; }
+      if (state.connections.some(c => c.name.toLocaleLowerCase() === title.toLocaleLowerCase())) { fail('That service already exists. Select it to manage its key, or use a different name.'); return; }
+      const authHeader = auth.value === 'bearer' ? 'Authorization' : auth.value === 'api-key' ? 'X-API-Key' : header.value.trim();
+      const authPrefix = auth.value === 'bearer' ? 'Bearer ' : auth.value === 'custom' ? prefix.value : '';
+      if (!/^[A-Za-z][A-Za-z0-9-]{0,63}$/.test(authHeader) || !/^([A-Za-z]{1,20} )?$/.test(authPrefix) || looksLikeKey(authHeader)) { fail('Use the authentication header and prefix from the provider’s API instructions.'); return; }
+      let secret = key.value; key.value = '';
+      if (!secret || secret.length > 8192 || /[\x00-\x20\x7f]/.test(secret)) { secret = ''; fail('Paste only the key, without spaces or extra lines.'); return; }
+      const filtering = readFiltering();
+      if (filtering.enabled && !filtering.paths.length && !filtering.actions.length) { secret = ''; fail('Enter at least one allowed path or action, or turn filtering off.'); return; }
+      const payload = { filtering, id: 'service-' + crypto.randomUUID(), name: title, baseUrl: url.origin, authHeader, authPrefix, accessDescription: 'Use this API origin with the permissions granted by your key, only for actions you request.', testRequest: { method: 'GET', path: url.pathname } };
+      try { await createService(payload, secret); } finally { secret = ''; }
+    });
+    body.append(form); panel.append(body);
+  }
+  async function createService(payload, key) {
+    state.pending = { action: 'create' }; applyBusy();
+    const submit = panel.querySelector('.new-service-form button'); if (submit) submit.textContent = 'Saving & checking…';
+    const formError = (text) => { const error = panel.querySelector('.new-service-form [role="alert"]'); if (error) { error.hidden = false; error.textContent = text; } };
+    let draft = null;
+    try {
+      const prepared = await api('/api/connections/prepare', payload);
+      if (!prepared.ok) { formError('Connection settings could not be saved. Check the endpoint and authentication options. Your key was not sent to the provider or saved.'); return; }
+      draft = prepared.data.connection;
+      if (!draft || draft.id !== payload.id || typeof draft.binding !== 'string' || draft.baseUrl !== payload.baseUrl || draft.authHeader !== payload.authHeader || draft.authPrefix !== payload.authPrefix) throw new Error('Unexpected preparation response');
+      const saved = await api('/api/connections/' + encodeURIComponent(draft.id) + '/key', { key, expectedBinding: draft.binding, test: true });
+      key = '';
+      state.mode = 'view'; search.value = '';
+      const refreshed = await loadConnections({ selectId: draft.id });
+      state.notice = { id: draft.id, tone: saved.ok && refreshed ? 'info' : 'error', text: saved.ok ? refreshed ? 'Service saved. The endpoint check passed; your key is hidden.' : 'The save finished, but status could not be refreshed. Refresh to verify the connection.' : 'The connection draft is saved. ' + failureMessage(saved.status, 'key', saved.data).replaceAll('Nothing was saved.', 'The key was not saved.') };
+      if (saved.ok && refreshed && selected()?.status === 'ready') pulseConnection();
+    } catch {
+      key = ''; state.loadError = true;
+      const message = 'No response arrived. A draft or save may have completed. Refresh to check before retrying. The key field has been cleared.';
+      if (draft) { state.mode = 'view'; search.value = ''; await loadConnections({ selectId: draft.id }); state.loadError = true; state.notice = { id: draft.id, tone: 'error', text: message }; }
+      else formError(message);
+    } finally {
+      key = ''; state.pending = null;
+      if (state.mode === 'new') { panel.querySelectorAll('[data-busy-disabled]').forEach(control => { control.disabled = false; delete control.dataset.busyDisabled; }); search.disabled = false; panel.setAttribute('aria-busy', 'false'); if (submit) { submit.textContent = 'Save & test'; submit.disabled = state.offline || state.loadError; } renderNetwork(); applyBusy(); }
+      else render();
+    }
+  }
+
   function renderPanel() {
     panel.replaceChildren();
     if (state.loading && !state.loaded) {
@@ -346,6 +427,7 @@
       for (let i = 0; i < 3; i++) { const line = node('div', 'skeleton skeleton-line'); line.setAttribute('aria-hidden', 'true'); body.append(line); }
       const loading = node('p', 'loading-status', 'Loading your connections…'); const spin = node('span', 'spinner'); spin.setAttribute('aria-hidden', 'true'); loading.prepend(spin); body.append(loading); panel.append(body); return;
     }
+    if (state.mode === 'new') { renderNewService(); applyBusy(); return; }
     const connection = selected();
     if (state.intentBlocked || !connection || !filtered().some((c) => c.id === connection.id)) { renderUnknown(); applyBusy(); return; }
     panel.append(heading(connection.name, connection.description, connection.status));
@@ -385,6 +467,7 @@
   }
   function failureMessage(status, action, data = {}) {
     // Only fixed diagnostic codes and a bounded HTTP number are trusted. Never show response text.
+    if (action === 'filtering' && status === 400) return 'Filtering was not saved. Enter valid exact paths or JSON action names; enabling it requires at least one allowed value.';
     const messages = {
       key_format: 'The key format was rejected before contacting the provider. Paste only the key, without spaces, extra lines, quotes, or a Bearer prefix. Nothing was saved.',
       provider_rejected: 'The provider rejected the connection check. Check that this is the required account key and that its permissions allow the check. Your existing connection was not replaced.',
@@ -419,7 +502,7 @@
         const refreshed = await loadConnections();
         if (refreshed) {
           const current = selected();
-          state.notice = action === 'disconnect' ? { id: connection.id, text: 'Disconnected from this bridge. The provider’s key has not been revoked.', tone: 'info' } : current?.status === 'needs_attention' ? null : { id: connection.id, text: action === 'key' ? 'Your key is saved and hidden.' : current?.lastTest?.ok === true ? 'The connection check passed.' : 'The bridge checked the connection setup. See its status below.', tone: 'info' };
+          state.notice = action === 'disconnect' ? { id: connection.id, text: 'Disconnected from this bridge. The provider’s key has not been revoked.', tone: 'info' } : current?.status === 'needs_attention' ? null : { id: connection.id, text: action === 'key' ? 'Your key is saved and hidden.' : action === 'filtering' ? 'API-call filtering saved.' : current?.lastTest?.ok === true ? 'The connection check passed.' : 'The bridge checked the connection setup. See its status below.', tone: 'info' };
           if (current?.status === 'ready' && (action === 'key' || (action === 'test' && current.lastTest?.ok === true))) pulseConnection();
         }
         announce(action === 'disconnect' ? 'Bridge disconnected. The provider key has not been revoked.' : refreshed && selected()?.status === 'ready' ? 'Connection ready.' : 'The request finished. Review the connection status.');
@@ -448,6 +531,7 @@
       search.disabled = false; panel.setAttribute('aria-busy', 'false'); const prepareButton = panel.querySelector('.manual-form button'); if (prepareButton) prepareButton.disabled = state.offline || state.loadError; renderNetwork(); renderList();
     }
   }
+  $('new-service').addEventListener('click', () => { if (isBusy() || state.loading || state.offline || state.loadError || !state.storageAvailable) return; state.mode = 'new'; state.intentBlocked = false; state.notice = null; render(); $('new-name')?.focus(); });
   search.addEventListener('paste', (event) => {
     if (looksLikeKey(event.clipboardData?.getData('text') || '')) { event.preventDefault(); search.value = ''; state.intentBlocked = true; renderList(); renderPanel(); announce('That looks like a key. Choose a service first, then use its private key box.'); }
   });

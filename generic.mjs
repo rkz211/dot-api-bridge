@@ -3,6 +3,7 @@ import {createLedger,digest,validateUploadUrl} from './helpers.mjs';
 const MAX=512*1024;const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;const ID=/^[a-zA-Z0-9_-]{1,100}$/;
 const SENSITIVE=/^(authorization|proxy.?authorization|cookie|set.?cookie|password|passwd|secret|client.?secret|token|access.?token|refresh.?token|api.?key|hub.?key|hub.?token|private.?key|credential|credentials|session(?:s|[._-]?(?:id|token|key|secret))?)$/i;
 const AUTH_SEGMENTS=new Set(['login','logout','signin','sign-in','signout','sign-out','session','sessions','authenticate','authentication']);
+const CREDENTIAL_SEGMENTS=new Set(['key','keys','token','tokens','secret','secrets','credential','credentials','password','passwords','auth','oauth','env','admin']);
 const ALLOWED_HEADERS=new Set(['content-type','accept','if-match','if-none-match','range']);
 const schema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const common={serviceId:{type:'string',pattern:'^[a-z][a-z0-9_-]{1,63}$'},path:{type:'string',description:'Absolute relative path beginning with one slash; no host, query, fragment, traversal, or encoded path separators.'},siteId:{type:'string',pattern:ID.source},query:{type:'object',additionalProperties:{type:['string','number','boolean']}},headers:{type:'object',additionalProperties:{type:'string'}}};
@@ -34,13 +35,28 @@ function configuredService(service,env){
  const host=url.hostname.toLowerCase();if(host.endsWith('.')||!host.includes('.')||/^[\d.]+$/.test(host)||host.includes(':')||/(^|\.)(localhost|local|internal|lan|home)$/.test(host))return {...service,enabled:false,baseUrl:null};
  return {...service,baseUrl:url.href.replace(/\/$/,'')};
 }
+export function normalizeFiltering(value){
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!['enabled','paths','actions'].includes(k))||typeof value.enabled!=='boolean')throw Error('Invalid API-call filtering configuration');
+ const paths=value.paths??[],actions=value.actions??[];
+ if(!Array.isArray(paths)||!Array.isArray(actions)||paths.length>100||actions.length>100||paths.some(p=>typeof p!=='string'||p.length>2048||!/^\/(?!\/)/.test(p)||/[\\?#\x00-\x20\x7f]|%(?:2f|5c|2e|25|00)/i.test(p)||p.split('/').some(x=>x==='.'||x==='..'))||actions.some(a=>typeof a!=='string'||! /^[A-Za-z][A-Za-z0-9_.:-]{0,99}$/.test(a)))throw Error('Invalid API-call allowlist');
+ if(value.enabled&&!paths.length&&!actions.length)throw Error('Enable filtering with at least one allowed path or action');
+ return {enabled:value.enabled,paths:[...new Set(paths)],actions:[...new Set(actions.map(a=>a.toLowerCase()))]};
+}
 export function prepare(args,env){
  const service=configuredService(Object.hasOwn(serviceRegistry(env),args.serviceId)?serviceRegistry(env)[args.serviceId]:null,env);if(!service?.enabled||(service.enableEnv&&env[service.enableEnv]!=='true'))throw Error('Service is disabled or unverified');
  if(!['GET','HEAD','POST','PUT','PATCH','DELETE'].includes(args.method))throw Error('Unsupported method');
  const path=args.path;if(typeof path!=='string'||path.length>2048||!path.startsWith('/')||path.startsWith('//')||/[\\?#\x00-\x20\x7f]/.test(path)||/%(?:2f|5c|2e|25|00)/i.test(path))throw Error('Unsafe relative path');
  let decoded;try{decoded=decodeURIComponent(path);}catch{throw Error('Invalid path encoding');}
- const segments=decoded.split('/').filter(Boolean);if(segments.some(s=>s==='.'||s==='..')||segments.some(s=>AUTH_SEGMENTS.has(s.toLowerCase())||service.blockedRoots.includes(s.toLowerCase()))||segments.some(s=>service.blockedSegments.includes(s.toLowerCase())))throw Error('Credential, administrative, or unsafe route requires a separate supported handoff');
- if(service.rpc){if(path!=='/'||args.method!=='POST'||!args.bodyJson||typeof args.bodyJson.action!=='string'||args.query!==undefined)throw Error('RPC service requires POST / with a JSON action');const action=args.bodyJson.action.toLowerCase();if(![...service.readActions,...service.writeActions].includes(action))throw Error('RPC action is not in the verified contract');if(args.bodyJson.sourceUrl!==undefined)throw Error('Remote source fetching requires a separate approved flow');}
+ const segments=decoded.split('/').filter(Boolean);if(segments.some(s=>s==='.'||s==='..')||segments.some(s=>AUTH_SEGMENTS.has(s.toLowerCase())||CREDENTIAL_SEGMENTS.has(s.toLowerCase())||service.blockedRoots.includes(s.toLowerCase()))||segments.some(s=>service.blockedSegments.includes(s.toLowerCase())))throw Error('Credential, administrative, or unsafe route requires a separate supported handoff');
+ if(service.rpc&&service.filtering===undefined){if(path!=='/'||args.method!=='POST'||!args.bodyJson||typeof args.bodyJson.action!=='string'||args.query!==undefined)throw Error('RPC service requires POST / with a JSON action');const action=args.bodyJson.action.toLowerCase();if(![...service.readActions,...service.writeActions].includes(action))throw Error('RPC action is not in the verified contract');if(args.bodyJson.sourceUrl!==undefined)throw Error('Remote source fetching requires a separate approved flow');}
+ // API-specific allowlists are optional; credential handling and transport guards are not.
+ if(service.rpc&&args.bodyJson?.sourceUrl!==undefined)throw Error('Remote source fetching requires a separate approved flow');
+ const action=args.bodyJson?.action;
+ if(typeof action==='string'&&/^(?:(?:create|issue|rotate|revoke|delete|export|list|get|read|update|set|reset)(?:api)?(?:keys?|tokens?|secrets?|credentials?|passwords?)|login|logout|signin|authenticate)$/.test(action.toLowerCase().replace(/[_ .:-]/g,'')))throw Error('Credential action requires a separate secure handoff');
+ if(service.filtering!==undefined){const filter=normalizeFiltering(service.filtering);if(filter.enabled){
+  if(filter.paths.length&&!filter.paths.includes(path))throw Error('Path is not allowed by API-call filtering');
+  if(filter.actions.length&&!['GET','HEAD'].includes(args.method)&&(typeof action!=='string'||!filter.actions.includes(action.toLowerCase())))throw Error('Action is not allowed by API-call filtering');
+ }}
  const url=new URL(service.baseUrl+path);if(url.origin!==new URL(service.baseUrl).origin)throw Error('Origin override rejected');
  if(args.query!==undefined&&(!args.query||typeof args.query!=='object'||Array.isArray(args.query)))throw Error('Invalid query');
  for(const [k,v] of Object.entries(args.query??{})){if(SENSITIVE.test(k)||!['string','number','boolean'].includes(typeof v)||k.length>100||String(v).length>2000)throw Error('Unsafe query');url.searchParams.set(k,String(v));}

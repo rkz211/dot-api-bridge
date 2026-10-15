@@ -86,3 +86,24 @@ test('invalid operation IDs give safe actionable errors before storage, credenti
  }
  assert.equal(calls,0);assert.equal(dbCalls,0);
 });
+
+test('filtering off forwards newly introduced RPC commands without enumeration and retains read classification',async()=>{
+ const settings={...env,__BRIDGE_SERVICES:{...SERVICES,example_rpc:{...SERVICES.example_rpc,filtering:{enabled:false,paths:[],actions:[]}}}};
+ const args={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'brandNewSyntheticCommand',value:42},operationId:id};let calls=0;
+ const result=await genericCall('bridge_api_write',args,settings,async(url,options)=>{calls++;assert.equal(JSON.parse(options.body).action,args.bodyJson.action);assert.equal(options.headers.get('X-Example-Key'),env.EXAMPLE_RPC_KEY);assert.equal(options.redirect,'manual');return Response.json({ok:true,token:'REDACT_ME'});},ledger());
+ assert.equal(calls,1);assert.equal(result.result.response.bodyJson.token,'[REDACTED]');
+ await assert.rejects(()=>genericCall('bridge_api_read',args,settings,()=>{throw Error('must not call')}),/verified read-only/);
+});
+test('enabled optional exact path and action allowlists reject before ledger or provider; body encodings cannot bypass actions',async()=>{
+ const settings={...env,__BRIDGE_SERVICES:{...SERVICES,example_rpc:{...SERVICES.example_rpc,filtering:{enabled:true,paths:['/rpc'],actions:['allowedcommand']}}}};
+ const args={serviceId:'example_rpc',method:'POST',path:'/rpc',bodyJson:{action:'AllowedCommand'},operationId:id};
+ assert.equal((await genericCall('bridge_api_write',args,settings,async()=>Response.json({ok:true}),ledger())).state,'completed');
+ for(const override of [{path:'/other'},{bodyJson:{action:'newCommand'}},{bodyJson:undefined,bodyText:'{"action":"allowedcommand"}'},{bodyJson:undefined,bodyBase64:btoa('{"action":"allowedcommand"}')}]){
+  const l=ledger();await assert.rejects(()=>genericCall('bridge_api_write',{...args,...override},settings,()=>{throw Error('must not fetch')},l),/filtering/);assert.equal(l.rows.size,0);
+ }
+});
+test('filtering off retains credential, origin, header, body and remote-source protections',()=>{
+ const settings={...env,__BRIDGE_SERVICES:{...SERVICES,example_rpc:{...SERVICES.example_rpc,filtering:{enabled:false}}}};
+ const args={serviceId:'example_rpc',method:'POST',path:'/',bodyJson:{action:'newCommand'}};
+ for(const change of [{path:'https://evil.example.invalid'},{path:'/../secrets'},{path:'/keys'},{path:'/v1/credentials'},{headers:{Authorization:'override'}},{bodyJson:{action:'newCommand',apiKey:'FAKE'}},{bodyJson:{action:'rotate_key'}},{bodyJson:{action:'newCommand',sourceUrl:'https://evil.example.invalid/source'}}])assert.throws(()=>prepare({...args,...change},settings));
+});

@@ -2,6 +2,10 @@
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
+import { readdirSync } from 'node:fs';
+import { createHandler } from '../worker.mjs';
 import { HTML, renderUi } from '../ui.mjs';
 class Element {
   constructor(tag, document) { this.style={setProperty(){}};this.tagName=tag.toUpperCase();this.document=document;this.children=[];this.attributes={};this.events={};this.dataset={};this.value='';this.disabled=false;this.hidden=false;this.className='';this._text='';this.parentNode=null; }
@@ -43,18 +47,19 @@ class Document extends Element {
 const fixtures=()=>[
 {id:'first',name:'Example Service',description:'Read your work.',keyHelpUrl:'https://example.com/keys',keyHelpText:'Create an API key in your provider account.',accessDescription:'Read permitted documents.',baseUrl:'https://api.example.com/v1',authLabel:'Authorization: Bearer token',binding:'binding-1',status:'needs_key',source:'none',lastTest:null,canSave:true},
 {id:'hosted',name:'Hosted Service',description:'Already prepared.',accessDescription:'Read public updates.',baseUrl:'https://api.example.com/v2',authLabel:'X-API-Key',binding:'binding-2',status:'ready',source:'hosted',lastTest:{ok:true,message:'Checked',at:'2026-10-08T18:00:00Z'},canSave:true}];
-async function setup(mode='default',searchQuery=''){
+async function setup(mode='default',searchQuery='',backend=null){
   const document=new Document(); document.documentElement=document;
-  for(const [tag,id] of [['div','connection-list'],['div','connection-panel'],['input','service-search'],['div','network-banner'],['span','connection-count'],['div','announcer'],['div','space-background']]){const el=document.createElement(tag);el.id=id;document.append(el);}
+  for(const [tag,id] of [['div','connection-list'],['div','connection-panel'],['input','service-search'],['div','network-banner'],['span','connection-count'],['div','announcer'],['div','space-background'],['button','new-service']]){const el=document.createElement(tag);el.id=id;if(id==='new-service')el.textContent='New service';document.append(el);}
   let connections=fixtures();if(mode==='empty')connections=[];if(mode==='attention'){connections[0].status='needs_attention';connections[0].source='saved';connections[0].lastTest={ok:false,message:'Check key permissions.'};}if(mode==='xss')connections[0].name='<img onerror=alert(1)>';
   const requests=[],copied=[],windowEvents={};
   const navigator={onLine:mode!=='offline',clipboard:{writeText:async v=>{copied.push(v);}}};
-  const fetch=async(url,options)=>{
+  const performFetch=async(url,options)=>{
     requests.push({url,options});
+    if(backend)return backend(new Request('https://private-bridge.example'+url,{...options,headers:{...options.headers,origin:'https://private-bridge.example','oai-authenticated-user-id':'test-owner'}}));
     if(mode==='load-error'&&options.method==='GET')return{ok:false,status:503,json:async()=>({})};
     if(options.method==='GET')return{ok:true,status:200,json:async()=>JSON.parse(JSON.stringify({connections,storageAvailable:mode!=='no-storage'}))};
     const payload=JSON.parse(options.body);
-    if(url.endsWith('/prepare')){const c={...fixtures()[0],...payload,id:'prepared',status:'needs_key'};connections.push(c);return{ok:true,status:201,json:async()=>({connection:c})};}
+    if(url.endsWith('/prepare')){const c={...fixtures()[0],...payload,id:payload.id||'prepared',status:'needs_key'};connections.push(c);return{ok:true,status:201,json:async()=>({connection:c})};}
     const id=url.split('/')[3],action=url.split('/')[4],c=connections.find(x=>x.id===id);
     if(mode==='conflict'){c.binding='changed-binding';return{ok:false,status:409,json:async()=>({message:'do not show raw mutation body'})};}
     if(mode.startsWith('diagnostic:'))return {ok:false,status:422,json:async()=>({code:mode.split(':')[1],providerStatus:503,message:'FAKE_SECRET_DO_NOT_RENDER'})};
@@ -64,10 +69,12 @@ async function setup(mode='default',searchQuery=''){
     else {c.status='ready';if(action==='key')c.source='saved';c.lastTest=mode==='untested'?null:{ok:true,message:'Connection checked'};}
     return{ok:true,status:200,json:async()=>({connection:c,message:'Completed'})};
   };
+  const pendingFetches=new Set();
+  const fetch=(...args)=>{const promise=performFetch(...args);pendingFetches.add(promise);promise.then(()=>pendingFetches.delete(promise),()=>pendingFetches.delete(promise));return promise;};
   const window={addEventListener:(name,handler)=>{(windowEvents[name]??=[]).push(handler);},matchMedia:()=>({matches:mode==='reduced-motion',addEventListener(){}})};
-  const context={document,navigator,window,location:{origin:'https://private-bridge.example',search:searchQuery},URL,fetch,AbortController,setTimeout,clearTimeout,Date,console};
+  const context={crypto:{randomUUID},document,navigator,window,location:{origin:'https://private-bridge.example',search:searchQuery},URL,fetch,AbortController,setTimeout,clearTimeout,Date,console};
   vm.runInNewContext(readFileSync(new URL('./client.js',import.meta.url),'utf8'),context);
-  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(setImmediate);};await settle();
+  const settle=async()=>{for(let i=0;i<5;i++){await Promise.allSettled([...pendingFetches]);await new Promise(setImmediate);}};await settle();
   const get=(id)=>document.getElementById(id);
   const findButton=(text)=>document.querySelectorAll('button').find(b=>b.textContent===text);
   const click=async(text)=>{const b=findButton(text);assert(b,'Missing button: '+text);assert(!b.disabled,'Button disabled: '+text);b.fire('click');await settle();};
@@ -81,7 +88,7 @@ await t.save();assert(t.document.textContent.includes('Your key is saved and hid
 await t.click('Replace key');assert.equal(t.get('api-key').value,'');await t.click('Cancel');assert(!t.get('api-key'));results.push('replace / cancel');
 await t.click('Disconnect');assert(t.document.textContent.includes('does not revoke'));await t.click('Keep connection');assert(!t.findButton('Disconnect this bridge'));await t.click('Disconnect');await t.click('Disconnect this bridge');assert(t.document.textContent.includes('provider’s key has not been revoked'));results.push('disconnect / cancel / disabled');
 t=await setup();const hosted=t.document.querySelectorAll('.connection-card')[1];hosted.fire('click');assert(!t.get('api-key'));assert(t.document.textContent.includes('no need to enter a key'));await t.click('Copy handoff');assert(t.copied[0].includes('Connection ID: hosted'));results.push('hosted ready / handoff');
-t.search('https://example.com/instructions.md?utm=hello');await t.click('Copy request for your dot');assert(t.copied[1].includes('https://example.com/instructions.md'));assert(!t.copied[1].includes('utm=hello'));results.push('unknown URL / safe copy');
+t.search('Unknown service');assert(t.document.textContent.includes('Choose New service'));assert.equal(t.document.querySelectorAll('.empty-symbol').length,0);assert(!t.findButton('Copy request for your dot'));results.push('direct setup guidance');
 t.search('sk-EXAMPLE_FAKE_VALUE_ONLY_FOR_TESTING');assert.equal(t.get('service-search').value,'');assert(!t.findButton('Copy request for your dot'));assert(!t.document.textContent.includes('sk-EXAMPLE'));assert(t.document.textContent.includes('That looks like a key'));results.push('token input blocked');
 t.search('https://example.com/docs?api_key=FAKE');assert.equal(t.get('service-search').value,'');assert(!t.findButton('Copy request for your dot'));results.push('credential URL blocked');
 t.search('New Service');t.get('manual-auth').value='bearer';t.get('manual-base-url').value='https://api.example.com/new';t.get('manual-access').value='Read public data';t.get('manual-base-url').parentNode.parentNode.fire('submit');await t.settle();assert(t.document.textContent.includes('New Service'));assert(t.get('api-key'));post=t.requests.filter(r=>r.options.method==='POST').at(-1);assert.equal(post.url,'/api/connections/prepare');assert.equal('key' in JSON.parse(post.options.body),false);results.push('manual draft only');
@@ -97,8 +104,62 @@ t=await setup('offline');assert(t.findButton('Save & test').disabled);results.pu
 t=await setup('xss');assert.equal(t.document.querySelectorAll('img').length,0);assert(t.document.textContent.includes('<img onerror=alert(1)>'));results.push('untrusted text not HTML');
 assert(renderUi({nonce:'nonce1234567890'}).includes('data-bridge-script nonce="nonce1234567890"'));assert(renderUi({nonce:'nonce1234567890'}).includes('data-bridge-style nonce="nonce1234567890"'));assert.throws(()=>renderUi({nonce:'"><script>'}));assert(!/localStorage|sessionStorage|innerHTML|outerHTML|eval\(/.test(readFileSync(new URL('./client.js',import.meta.url),'utf8')));assert.equal((HTML.match(/<script /g)||[]).length,1);results.push('CSP nonce / no storage / no dynamic HTML');
 t=await setup('default','?connect=hosted');assert(t.document.textContent.includes('Hosted Service'));assert(!t.get('api-key'));results.push('prepared link selects intended service');
-t=await setup('default','?connect=missing_service');assert(!t.get('api-key'));assert(t.document.textContent.includes('Ask your dot'));results.push('missing prepared link does not select another key destination');
+t=await setup('default','?connect=missing_service');assert(!t.get('api-key'));assert(t.document.textContent.includes('Choose New service'));results.push('missing prepared link does not select another key destination');
 t=await setup();assert.equal(t.get('space-background').getAttribute('data-pulse'),undefined);await t.save();assert.equal(t.get('space-background').getAttribute('data-pulse'),'a');await t.click('Test connection');assert.equal(t.get('space-background').getAttribute('data-pulse'),'b');await t.click('Test connection');assert.equal(t.get('space-background').getAttribute('data-pulse'),'a');await t.click('Disconnect');await t.click('Disconnect this bridge');assert.equal(t.get('space-background').getAttribute('data-pulse'),'a');results.push('pulse only follows successful save/test; repeated success restarts; disconnect does not pulse');
 for(const mode of ['failed','conflict','response-lost','diagnostic:provider_rejected']){t=await setup(mode);await t.save();assert.equal(t.get('space-background').getAttribute('data-pulse'),undefined,mode);}results.push('failed and unconfirmed operations never pulse');
 t=await setup('reduced-motion');await t.save();await t.click('Test connection');assert.equal(t.get('space-background').getAttribute('data-pulse'),undefined);const styles=readFileSync(new URL('./styles.css',import.meta.url),'utf8');assert(styles.includes('@media(prefers-reduced-motion:reduce){.space-background:before,.space-background:after,.space-wormhole:before,.space-signal{animation:none!important}.space-signal{display:none}}'));assert(HTML.includes('id="space-background" class="space-background" aria-hidden="true"'));results.push('reduced motion suppresses pulse and all decorative CSS animation; background hidden from assistive technology');
-console.log(JSON.stringify({passed:results.length,checks:results,limits:'DOM simulation, not browser layout or real provider verification.'},null,2));
+
+
+// Exercise the actual UI -> existing worker routes -> SQLite-backed store, with provider fetch mocked.
+const db=new DatabaseSync(':memory:');
+for(const f of readdirSync(new URL('../drizzle/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort())db.exec(readFileSync(new URL('../drizzle/'+f,import.meta.url),'utf8'));
+const env={DB:{prepare(sql){const stmt=db.prepare(sql);return {bind(...args){return {async run(){return {meta:{changes:Number(stmt.run(...args).changes)}};},async first(){return stmt.get(...args)||null;},async all(){return {results:stmt.all(...args)}}};},async all(){return {results:stmt.all()}}};}}};
+let providerCalls=[],providerStatus=200;
+const handler=createHandler(async(url,options)=>{providerCalls.push({url,options});return Response.json({ok:true},{status:providerStatus});});
+const backend=req=>handler(req,env);
+async function directForm(name='Direct API',endpoint='https://api.example.com/v1/health',auth='bearer',serviceBackend=backend){
+ const page=await setup('default','',serviceBackend);await page.click('New service');
+ page.get('new-name').value=name;page.get('new-endpoint').value=endpoint;page.get('api-key').value='FAKE_DIRECT_KEY';page.get('new-auth').value=auth;
+ return page;
+}
+async function submitDirect(page){page.get('api-key').parentNode.parentNode.fire('submit');for(let i=0;i<20;i++)await page.settle();}
+t=await directForm();await submitDirect(t);
+assert(t.document.textContent.includes('Service saved. The endpoint check passed'));
+let writes=t.requests.filter(r=>r.options.method==='POST');assert.equal(writes.length,2);assert.equal(writes[0].url,'/api/connections/prepare');assert(!writes[0].options.body.includes('FAKE_DIRECT_KEY'));
+assert.equal(providerCalls.length,1);assert.equal(providerCalls[0].url,'https://api.example.com/v1/health');assert.equal(providerCalls[0].options.method,'GET');assert.equal(providerCalls[0].options.headers.get('Authorization'),'Bearer FAKE_DIRECT_KEY');
+assert(!t.document.textContent.includes('FAKE_DIRECT_KEY'));
+const savedId=JSON.parse(writes[0].options.body).id;
+t=await setup('default','?connect='+savedId,backend);assert(t.document.textContent.includes('Direct API'));assert(t.document.textContent.includes('Connection checked'));assert(!t.get('api-key'));assert(t.findButton('Replace key'));results.push('direct form saves through real routes / exact GET / reload persists ready connection without key exposure');
+for(const auth of ['api-key','custom']){
+ t=await directForm('Direct '+auth,'https://api.example.com/status',auth);
+ if(auth==='custom'){t.get('new-header').value='X-Service-Key';t.get('new-prefix').value='Token ';}
+ await submitDirect(t);assert(t.document.textContent.includes('Service saved.'));
+ assert.equal(providerCalls.at(-1).options.headers.get(auth==='api-key'?'X-API-Key':'X-Service-Key'),auth==='api-key'?'FAKE_DIRECT_KEY':'Token FAKE_DIRECT_KEY');
+}results.push('X-API-Key and custom authentication presets');
+providerStatus=401;t=await directForm('Rejected service');await submitDirect(t);assert(t.document.textContent.includes('connection draft is saved'));assert(t.document.textContent.includes('provider rejected'));assert.equal(t.get('api-key').value,'');
+const rejectedId=JSON.parse(t.requests.find(r=>r.options.method==='POST').options.body).id;
+t=await setup('default','?connect='+rejectedId,backend);assert(t.get('api-key'));assert.equal(t.get('api-key').value,'');assert(!t.document.textContent.includes('Connection checked'));results.push('rejected check persists only draft / reload needs key');
+providerStatus=200;t=await directForm('Direct API');const beforeDuplicate=providerCalls.length;await submitDirect(t);assert(t.document.textContent.includes('already exists'));assert.equal(t.requests.filter(r=>r.options.method==='POST').length,0);assert.equal(providerCalls.length,beforeDuplicate);results.push('duplicate name cannot replace existing connection');
+for(const endpoint of ['http://api.example.com/health','https://api.example.com/health?key=FAKE','https://user:pass@api.example.com/health']){
+ t=await directForm('Bad endpoint',endpoint);await submitDirect(t);assert.equal(t.requests.filter(r=>r.options.method==='POST').length,0);
+}
+t=await directForm('Blocked endpoint','https://localhost/health');const beforeBlocked=providerCalls.length;await submitDirect(t);assert(t.document.textContent.includes('could not be saved'));assert.equal(t.requests.filter(r=>r.options.method==='POST').length,1);assert.equal(providerCalls.length,beforeBlocked);assert.equal(t.get('api-key').value,'');results.push('invalid URLs and server SSRF guards stop before key submission');
+t=await directForm('Cancelled');await t.click('Cancel');assert(!t.get('new-name'));assert(!t.document.textContent.includes('FAKE_DIRECT_KEY'));results.push('cancel clears direct form');
+for(const mode of ['offline','load-error','no-storage']){t=await setup(mode);assert(t.get('new-service').disabled);}results.push('direct creation disabled without connection or storage');
+t=await directForm('Lost key response','https://api.example.com/status','bearer',async req=>{const response=await backend(req);if(req.url.endsWith('/key'))throw Error('Response lost');return response;});
+await submitDirect(t);assert(t.document.textContent.includes('No response arrived'));assert(t.get('new-service').disabled);
+const lostId=JSON.parse(t.requests.find(r=>r.options.method==='POST').options.body).id;
+t=await setup('default','?connect='+lostId,backend);assert(t.document.textContent.includes('Connection checked'));assert(!t.get('api-key'));results.push('lost key response reconciles persisted connection on reload without retry');
+t=await directForm('Lost prepare response','https://api.example.com/status','bearer',async req=>{const response=await backend(req);if(req.url.endsWith('/prepare'))throw Error('Response lost');return response;});
+await submitDirect(t);assert(t.document.textContent.includes('No response arrived'));assert.equal(t.requests.filter(r=>r.options.method==='POST').length,1);assert.equal(t.get('api-key').value,'');assert(t.findButton('Save & test').disabled);results.push('lost prepare response never sends key or automatically retries');
+t=await setup('default','?connect='+savedId,backend);
+assert.equal(t.get('filter-enabled').checked,false);assert(t.get('filter-actions').parentNode.parentNode.hidden);
+t.get('filter-enabled').checked=true;t.get('filter-enabled').fire('change');assert(!t.get('filter-actions').parentNode.parentNode.hidden);
+t.get('filter-paths').value='/v1/health\n/rpc';t.get('filter-actions').value='SyntheticFutureCommand';
+t.get('filter-enabled').parentNode.parentNode.fire('submit');await t.settle();assert(t.document.textContent.includes('API-call filtering saved.'));
+t=await setup('default','?connect='+savedId,backend);assert.equal(t.get('filter-enabled').checked,true);assert.equal(t.get('filter-paths').value,'/v1/health\n/rpc');assert.equal(t.get('filter-actions').value,'syntheticfuturecommand');assert(t.findButton('Replace key'));
+t.get('filter-enabled').checked=false;t.get('filter-enabled').fire('change');t.get('filter-enabled').parentNode.parentNode.fire('submit');await t.settle();
+t=await setup('default','?connect='+savedId,backend);assert.equal(t.get('filter-enabled').checked,false);assert(t.findButton('Replace key'));results.push('filter toggle reveals configuration / saves through real route / reload persists / key retained');
+t=await directForm('Filtered new service');assert.equal(t.get('filter-enabled').checked,false);t.get('filter-enabled').checked=true;t.get('filter-enabled').fire('change');t.get('filter-paths').value='/v1/health';await submitDirect(t);assert(t.document.textContent.includes('Service saved.'));assert.equal(t.get('filter-enabled').checked,true);results.push('new service optional filtering saved with direct creation');
+db.close();
+console.log(JSON.stringify({passed:results.length,checks:results,limits:'DOM simulation and SQLite-backed worker integration with fake keys and mocked provider; no live mutation.'},null,2));

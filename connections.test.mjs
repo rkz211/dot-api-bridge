@@ -64,3 +64,44 @@ test('fresh installation needs only the D1 binding and owner key entry, with no 
  const page=await h(uiRequest('/'),env);assert.equal(page.status,200);assert((await page.text()).includes('What do you want to connect?'));
  const response=await h(uiRequest('/api/connections/cookiejar/key',{method:'POST',body:{key:'FAKE_FIRST_RUN',expectedBinding:initial.connections[0].binding}}),env);assert.equal(response.status,200);const body=await response.json();assert.equal(body.connection.source,'saved');assert.equal(body.connection.status,'ready');assert(!JSON.stringify(body).includes('FAKE_FIRST_RUN'));assert.deepEqual(Object.keys(env),['DB']);
 });
+
+test('new connections default filtering off and persist arbitrary synthetic JSON writes',async()=>{
+ const env=base();await prepareConnection(draft,env);let c=await connection(env);assert.deepEqual(c.filtering,{enabled:false,paths:[],actions:[]});
+ await connectionAction(c.id,'key',{key:'FAKE_FILTER_KEY',test:false,expectedBinding:c.binding},env,success);
+ const resolved=await resolveConnectionEnv(env);const r=await genericCall('bridge_api_write',{serviceId:c.id,method:'POST',path:'/rpc',operationId:'12345678-1234-1234-1234-123456789abc',bodyJson:{action:'inventedFutureCommand'}},resolved,async(u,o)=>{assert.equal(JSON.parse(o.body).action,'inventedFutureCommand');return Response.json({ok:true});});assert.equal(r.state,'completed');
+ assert.deepEqual((await connection(env)).filtering,{enabled:false,paths:[],actions:[]});
+});
+test('filter configuration edits preserve saved key and destination, persist, reject stale revisions, and survive omitted reprepare settings',async()=>{
+ const env=base();await prepareConnection(draft,env);let c=await connection(env);await connectionAction(c.id,'key',{key:'FAKE_FILTER_KEY',test:false,expectedBinding:c.binding},env,success);c=await connection(env);
+ const filtering={enabled:true,paths:['/health','/rpc'],actions:['syntheticCreateRecord']};
+ await connectionAction(c.id,'filtering',{filtering,expectedBinding:c.binding},env,success);
+ let current=await connection(env);assert.equal(current.source,'saved');assert.equal(current.baseUrl,draft.baseUrl);assert.deepEqual(current.filtering,{...filtering,actions:['syntheticcreaterecord']});
+ assert.equal((await resolveConnectionEnv(env)).BRIDGE_SAVED_example_api,'FAKE_FILTER_KEY');
+ await assert.rejects(()=>connectionAction(c.id,'filtering',{filtering:{enabled:false},expectedBinding:c.binding},env,success),e=>e.status===409);
+ await prepareConnection(draft,env);current=await connection(env);assert.equal(current.filtering.enabled,true);assert.equal(current.source,'saved');
+ await assert.rejects(()=>prepareConnection({...draft,baseUrl:'https://other.example.com',filtering:{enabled:false}},env),e=>e.status===409);
+ await connectionAction(c.id,'filtering',{filtering:{enabled:false},expectedBinding:current.binding},env,success);assert.equal((await connection(env)).filtering.enabled,false);
+});
+test('invalid filtering fails closed without changing persisted configuration',async()=>{
+ const env=base();await prepareConnection(draft,env);const c=await connection(env);
+ for(const filtering of [{enabled:true},{enabled:'false'},{enabled:true,paths:['//evil.example.com']},{enabled:true,paths:['/../keys']},{enabled:true,actions:['*']},{enabled:false,extra:'ignored?'}])await assert.rejects(()=>connectionAction(c.id,'filtering',{filtering,expectedBinding:c.binding},env,success));
+ assert.equal((await connection(env)).filtering.enabled,false);
+});
+test('legacy RPC registry remains restricted until explicitly configured; ordinary metadata preparation does not turn filtering off',async()=>{
+ const env={...base(),EXAMPLE_RPC_ENABLED:'true',EXAMPLE_RPC_API_URL:'https://api.example.com',EXAMPLE_RPC_KEY:'FAKE_RPC_KEY'};
+ let c=await connection(env,'example_rpc');assert.equal(c.filteringLegacy,true);assert.equal(c.filtering.enabled,true);
+ const config={id:c.id,name:c.name,baseUrl:c.baseUrl,authHeader:c.authHeader,authPrefix:c.authPrefix,accessDescription:c.accessDescription};
+ await prepareConnection(config,env);c=await connection(env,'example_rpc');assert.equal(c.filteringLegacy,true);
+ const args={serviceId:c.id,method:'POST',path:'/',bodyJson:{action:'futureCommand'},operationId:'12345678-1234-1234-1234-123456789abc'};
+ const legacyEnv=await resolveConnectionEnv(env);await assert.rejects(()=>genericCall('bridge_api_write',args,legacyEnv,success),/verified contract/);
+ await connectionAction(c.id,'filtering',{filtering:{enabled:false},expectedBinding:c.binding},env,success);
+ c=await connection(env,'example_rpc');assert.equal(c.filteringLegacy,false);assert.equal(c.filtering.enabled,false);assert.equal(c.source,'hosted');
+ const r=await genericCall('bridge_api_write',args,await resolveConnectionEnv(env),success);assert.equal(r.state,'completed');
+});
+
+test('filter policy change makes an in-flight key save stale instead of overwriting the newer policy',async()=>{
+ const env=base();await prepareConnection(draft,env);let c=await connection(env);let release,started;const waiting=new Promise(r=>release=r),begin=new Promise(r=>started=r);
+ const saving=connectionAction(c.id,'key',{key:'FAKE_PENDING_KEY',expectedBinding:c.binding,test:true},env,async()=>{started();await waiting;return Response.json({ok:true});});
+ await begin;await connectionAction(c.id,'filtering',{filtering:{enabled:true,paths:['/health']},expectedBinding:c.binding},env,success);release();
+ await assert.rejects(()=>saving,e=>e.status===409);c=await connection(env);assert.equal(c.filtering.enabled,true);assert.equal(c.status,'needs_key');assert.equal((await connectionStore(env.DB).get(c.id,true)).key_value,null);
+});

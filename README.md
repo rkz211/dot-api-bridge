@@ -6,7 +6,7 @@ A private setup page and MCP connection for APIs your dot does not already have 
 
 [Download the illustrated guide as a PDF](docs/assets/jailbreak-dot-api-bridge.pdf)
 
-Start with what you want to do, a service name, its website, or a link to its agent instructions. Your dot reads the official documentation and prepares the connection. You review the destination and enter your API key directly in the private page. Then tell your dot what to do.
+Choose New service in the private page, enter a name, a read-only API endpoint, and your key, then Save & test. Dot can also read official documentation and prepare connection details for you. Keep keys in the private page; then tell your dot what to do.
 
 The page does not run an LLM or discover services on its own. Unknown services produce a copyable request for your dot. This bridge needs no external LLM API or LLM API key. Hosting and connected-service charges depend on your providers.
 
@@ -24,11 +24,16 @@ Cookiejar is the included real example and is currently waitlist-stage. Its live
 
 ## Guided connection setup
 
-1. Choose a prepared service, or enter a service name, website, or agent-instructions link.
-2. For a new service, give your dot the page's copyable request. It checks official documentation and calls `bridge_prepare_connection` with non-secret details.
-3. Review what access the key grants, the verified key-help instructions, and the API destination.
-4. Enter the key in the masked private key box and save it. A verified read-only check runs when one is configured.
-5. Copy the ready connection's handoff and tell your dot the action you want.
+1. Open the private page and choose **New service**.
+2. Enter a service name, a read-only HTTPS API endpoint, and your API key in the masked field.
+3. Choose **Save & test**. The bridge saves the connection settings, sends GET to the exact endpoint, and saves the key only after the check passes.
+4. The connection remains available after reload. Tell your dot what you want to do with it.
+
+The default is `Authorization: Bearer <key>`. **Authentication options** also offers `X-API-Key` and a custom header/prefix. The endpoint’s origin becomes the API base and its path is the GET check; queries, fragments, embedded credentials, and unsafe destinations are rejected. A successful response proves that request succeeded, not every API permission or that a public endpoint validated the key. OAuth flows, signed requests, multiple authentication headers, and POST-only checks need provider-specific setup.
+
+Dot-assisted preparation remains optional: dot can read official documentation and call `bridge_prepare_connection`, then you enter the key on the private page. **Advanced: prepare a connection manually** also remains available for saving settings without a key. Existing provider presets keep their configured checks.
+
+If the check fails, the non-secret draft remains but the key is not saved. If a response is lost, refresh to reconcile the saved state before retrying.
 
 You can test, replace, or disconnect a key from the same page. A connection without a configured check is shown as saved but not automatically verified. A successful check is not permission for future actions.
 
@@ -93,3 +98,7 @@ Automated tests use synthetic data, fake keys, mocked provider requests, and loc
 MIT. See [LICENSE](LICENSE).
 
 The display name and repository are **dot API bridge** and [rkz211/dot-api-bridge](https://github.com/rkz211/dot-api-bridge). Package, tool, and sample verification identifiers retain their existing names for compatibility.
+
+## Optional API-call filtering
+
+New custom connections default filtering off: provider writes and new RPC commands need no action registry. Enable **Filter API calls** to configure exact allowed paths and/or JSON action names. Existing configured services retain their prior policy until explicitly changed. Native authentication, destination binding, credential guards, redaction, and transport protections remain enforced independently. Read-only POST classification also remains separate. See [configuration and migration details](SETUP.md#optional-api-call-filtering).

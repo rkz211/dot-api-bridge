@@ -33,13 +33,16 @@ This deploys the bridge itself. It does not prove upstream account access or aut
 
 ## Connect a service in the private page
 
-1. Open the verified private Site link while signed in.
-2. Choose a prepared service, or enter a service name, website, or agent-instructions link. Enter your goal when asking your dot for help. Do not enter a key in the search box.
-3. If the service is not prepared, copy the page's request to your dot. The agent reads official documentation and uses `bridge_prepare_connection` to save the non-secret API details. Preparation makes no provider request and does not grant access.
-4. Follow the returned private setup link. Review the service, access description, key-help instructions, and exact API destination.
-5. Enter the key yourself in the masked key field. Confirm the destination, then choose **Save & test**. Keep the key out of chat, source code, files, URLs, and model tool arguments.
-6. If a verified GET/HEAD probe is configured, inspect its result. Without one, the page reports that the key is saved but not automatically verified. A failed test leaves an existing working saved key unchanged. If a request's outcome is uncertain, refresh before trying again.
-7. Copy the ready connection's handoff and tell your dot the task you want completed. The agent checks safe readiness and makes an authorized request to verify upstream access.
+1. Open the verified private Site link while signed in, then choose **New service**.
+2. Enter a service name, a read-only HTTPS API endpoint, and the API key in the masked field. Keep the key out of chat, source code, files, URLs, and model tool arguments.
+3. Choose **Save & test**. This prepares the non-secret connection settings and then sends GET to the exact endpoint. The key is saved only after that check passes.
+4. Reload to see the saved connection, then tell your dot what to do. A successful check is not permission for future actions.
+
+**Authentication options** defaults to `Authorization: Bearer` and supports `X-API-Key` or a custom header/prefix. The endpoint’s origin is the API base; its path is used for the GET check. Use a documented read-only endpoint without queries, fragments, or embedded credentials. A public endpoint may return success without validating the key. OAuth, signed requests, multi-header authentication, and POST-only checks require provider-specific setup rather than a generic success claim.
+
+Dot can still prepare a connection from official documentation with `bridge_prepare_connection`; return via its private setup link to enter the key. You can also use **Advanced: prepare a connection manually** to save settings without a key. Existing prepared services retain their configured checks, key replacement, and disconnect flows.
+
+A failed check leaves the new non-secret draft available for correction but does not save the rejected key. If a response is lost, refresh to check whether the draft or key was saved before retrying; the page never automatically repeats the mutation.
 
 Keys are stored server-side in the Site's native D1 database, with platform-managed encryption at rest. Authorized database administrators can read stored values. The page does not save keys in browser storage or show them again after saving. This is ordinary protected application storage, not a separate inaccessible vault.
 
@@ -76,3 +79,13 @@ The agent should return the verified private setup link and the smallest remaini
 ## Background effects
 
 The clouds shuffle all 15 colors, using each once before reshuffling and preventing a repeated color at the boundary. Each holds for three minutes, then blends for twelve seconds. Refreshing starts a fresh shuffle. Mouse movement adds a short fading light to the existing background; faster movement makes it stronger. Controls stay still. Touch devices do not use this effect, and your system's Reduced Motion preference disables it and keeps the cloud color static. No extra settings or permissions are required.
+
+## Optional API-call filtering
+
+New custom connections default **Filter API calls** to off. They can send new provider JSON/RPC commands through `bridge_api_write` without enumerating each command. Turning filtering off does not turn off native authentication, destination/key binding, unsafe-URL/header checks, known credential route/action/field guards, secret redaction, response bounds, redirect refusal, or durable write replay protection. These guards cannot infer every provider-specific security operation; callers must still follow the user's authorization.
+
+Enable the toggle during **New service** setup, or open an existing service's **Connection details** and choose **Save filtering**. Configure exact relative paths and/or JSON `action` values, one per line. Paths are case-sensitive; action names are case-insensitive. Empty lists leave that dimension unrestricted, but enabling requires at least one nonempty list. If both lists are set, both must match for writes. GET/HEAD use the path list only. Action filtering requires a JSON object with an allowed `action`; text/base64 bodies cannot bypass it. A check endpoint must satisfy any configured path list.
+
+Read/write classification is separate: arbitrary POST commands use the write tool, even with filtering off. Only a provider adapter's verified read actions may use POST through the read tool. This setting does not add OAuth, request signing, or provider protocol support.
+
+Migration: policy lives in existing `bridge_connections.config_json`; no database schema migration or bulk update is needed. Existing records and predefined registry services without a filtering property retain their previous behavior, including legacy RPC action/method/path restrictions. The UI labels preserved legacy RPC restrictions. An explicit filtering save replaces those API-specific restrictions; omitting filtering during metadata preparation preserves the existing policy. Policy edits update the revision and reject stale edits while retaining the destination, key, and connection state. Nothing changes on a live deployment until separately published and configured.

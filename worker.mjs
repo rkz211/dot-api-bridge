@@ -45,7 +45,7 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
         if(path==='/api/connections'&&request.method==='GET')return json(await listConnections(env));
         requireUiWrite(request);const args=await readUiJson(request);
         if(path==='/api/connections/prepare'){const prepared=await prepareConnection(args,env);const status=await listConnections(env);return json({connection:status.connections.find(c=>c.id===prepared.id),message:prepared.message},201);}
-        const match=/^\/api\/connections\/([a-z][a-z0-9_-]{1,63})\/(key|test|disconnect)$/.exec(path);if(!match)return json({error:'not_found',message:'That connection action was not found.'},404);
+        const match=/^\/api\/connections\/([a-z][a-z0-9_-]{1,63})\/(key|test|disconnect|filtering)$/.exec(path);if(!match)return json({error:'not_found',message:'That connection action was not found.'},404);
         return json(await connectionAction(match[1],match[2],args,env,fetcher));
       }catch(cause){return json({error:cause instanceof ConnectionError?'connection_error':'storage_unavailable',code:cause instanceof ConnectionError?cause.code:'storage_unavailable',providerStatus:cause instanceof ConnectionError?cause.providerStatus:null,message:cause instanceof ConnectionError?cause.message:'Connection storage is unavailable. No successful change is confirmed. Refresh before trying again.'},cause instanceof ConnectionError?cause.status:503);}
     }

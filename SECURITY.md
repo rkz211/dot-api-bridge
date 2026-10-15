@@ -49,3 +49,7 @@ Automated tests use fake keys, mocked providers, and local SQLite. UI preview an
 Private-runtime authenticated read verification does not establish that a fresh deployment of this public source, another owner's database/account, or any live write works. Verify each deployment's owner-only access, managed authentication, storage, and intended upstream behavior before reporting it ready for that task.
 
 Do not post credentials, private deployment URLs, account identifiers, signed URLs, or customer data in a public issue. Reproduce vulnerabilities with fake credentials and synthetic fixtures. This repository does not establish a private vulnerability-reporting channel.
+
+## Optional API-call filtering
+
+New custom connections default filtering off: provider writes and new RPC commands need no action registry. Enable **Filter API calls** to configure exact allowed paths and/or JSON action names. Existing configured services retain their prior policy until explicitly changed. Native authentication, destination binding, credential guards, redaction, and transport protections remain enforced independently. Read-only POST classification also remains separate. See [configuration and migration details](SETUP.md#optional-api-call-filtering).
