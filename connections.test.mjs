@@ -38,7 +38,7 @@ test('save diagnostics distinguish input, provider HTTP, network and response fa
  }
 });
 test('save diagnostics identify configuration and storage failures without provider bodies or key values',async()=>{
- const env=base();await prepareConnection({...draft,testRequest:{method:'GET',path:'/login'}},env);let calls=0;const c=await connection(env);
+ const env=base();await prepareConnection({...draft,testRequest:{method:'GET',path:'/../x'}},env);let calls=0;const c=await connection(env);
  await assert.rejects(connectionAction(c.id,'key',{key:'FAKE_DIAGNOSTIC_KEY',expectedBinding:c.binding},env,async()=>{calls++;return Response.json({});}),e=>e.code==='check_configuration');assert.equal(calls,0);
  const realPrepare=env.DB.prepare;env.DB.prepare=(sql)=>{if(sql.startsWith('INSERT INTO bridge_connections'))throw Error('FAKE_STORAGE_DETAIL');return realPrepare(sql);};
  const builtin=await connection(env,'cookiejar');const response=await createHandler(success)(uiRequest('/api/connections/cookiejar/key',{method:'POST',body:{key:'FAKE_DIAGNOSTIC_KEY',expectedBinding:builtin.binding}}),env);const body=await response.json();assert.equal(response.status,503);assert.equal(body.code,'storage_unavailable');assert(!JSON.stringify(body).includes('FAKE_'));

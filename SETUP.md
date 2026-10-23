@@ -82,7 +82,7 @@ The clouds shuffle all 15 colors, using each once before reshuffling and prevent
 
 ## Optional API-call filtering
 
-New custom connections default **Filter API calls** to off. They can send new provider JSON/RPC commands through `bridge_api_write` without enumerating each command. Turning filtering off does not turn off native authentication, destination/key binding, unsafe-URL/header checks, known credential route/action/field guards, secret redaction, response bounds, redirect refusal, or durable write replay protection. These guards cannot infer every provider-specific security operation; callers must still follow the user's authorization.
+New custom connections default **Filter API calls** to off. They can send new provider JSON/RPC commands through `bridge_api_write` without enumerating each command. Turning filtering off does not turn off native authentication, destination/key binding, unsafe-URL/header checks, redaction of the stored key, response bounds, redirect refusal, or durable write replay protection. These guards cannot infer every provider-specific security operation; callers must still follow the user's authorization.
 
 Enable the toggle during **New service** setup, or open an existing service's **Connection details** and choose **Save filtering**. Configure exact relative paths and/or JSON `action` values, one per line. Paths are case-sensitive; action names are case-insensitive. Empty lists leave that dimension unrestricted, but enabling requires at least one nonempty list. If both lists are set, both must match for writes. GET/HEAD use the path list only. Action filtering requires a JSON object with an allowed `action`; text/base64 bodies cannot bypass it. A check endpoint must satisfy any configured path list.
 

@@ -4,7 +4,7 @@ import {genericCall,normalizeFiltering} from './generic.mjs';
 const ID=/^[a-z][a-z0-9_-]{1,63}$/;
 const RESERVED=new Set(['constructor','prototype','__proto__']);
 const FORBIDDEN_HEADERS=new Set(['host','cookie','set-cookie','origin','referer','content-length','content-type','connection','transfer-encoding','x-site']);
-const BLOCKED_ROOTS=['key','admin','env','auth','oauth','credentials','tokens','secrets','password'];
+const BLOCKED_ROOTS=[];
 const META_KEYS=['id','name','description','baseUrl','authHeader','authPrefix','keyHelpUrl','keyHelpText','accessDescription','sourceUrl','testRequest','filtering'];
 const now=()=>new Date().toISOString();
 const schema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
@@ -41,7 +41,7 @@ export function connectionStore(db){
  };
 }
 function parseRow(row){if(!row)return null;try{return {...row,config:JSON.parse(row.config_json),lastTest:row.last_test_json?JSON.parse(row.last_test_json):null};}catch{throw new ConnectionError('A connection needs repair. Ask your dot to check its saved configuration.',503);}}
-function dynamicService(config){return {enabled:true,baseUrl:config.baseUrl,credentialEnv:`BRIDGE_SAVED_${config.id}`,enableEnv:`BRIDGE_ENABLED_${config.id}`,authHeader:config.authHeader,authPrefix:config.authPrefix,blockedRoots:BLOCKED_ROOTS,blockedSegments:['rotate'],rpc:false,...(config.filtering!==undefined?{filtering:config.filtering}:{})};}
+function dynamicService(config){return {enabled:true,baseUrl:config.baseUrl,credentialEnv:`BRIDGE_SAVED_${config.id}`,enableEnv:`BRIDGE_ENABLED_${config.id}`,authHeader:config.authHeader,authPrefix:config.authPrefix,blockedRoots:BLOCKED_ROOTS,blockedSegments:[],rpc:false,...(config.filtering!==undefined?{filtering:config.filtering}:{})};}
 function savedService(config){
  const builtin=Object.hasOwn(SERVICES,config.id)?SERVICES[config.id]:null;
  if(!builtin)return dynamicService(config);

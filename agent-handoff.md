@@ -100,7 +100,7 @@ Creating a site also creates a credential; obtain the applicable action-time app
 - Dedicated source ZIP checks reject unsafe structure, paths, symlinks, overlap, and expansion limits. They do not prove the included application is safe.
 - Signed uploads support Cookiejar source ZIPs only. Other file tiers, required upload headers, providers, or arbitrary signed downloads need a separately reviewed supported flow.
 - There is no built-in build-completion watcher, domain helper, automatic reconciliation, per-site write grant, or confirmation-receipt enforcement. The caller retains responsibility for approvals and end-to-end verification.
-- Credential/login guards and redaction are heuristic. Arbitrary text and binary data cannot be proven secret-free. Do not use generic calls to bypass credential-handling or security approval requirements.
+- Routes, fields and actions are not filtered by name; the upstream API enforces its own access. The bridge redacts only its own stored key from responses.
 - The fictional `example_rpc` fixture demonstrates behavior-based POST action classification. It has no configured live endpoint and is not a setup step. A real bespoke adapter requires verified semantics, destination, authentication, restrictions, and synthetic tests; it must not inherit invented actions from the fixture.
 
 ## Troubleshoot the actual layer

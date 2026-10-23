@@ -1,9 +1,8 @@
 import {SERVICES} from './services.mjs';
 import {createLedger,digest,validateUploadUrl} from './helpers.mjs';
 const MAX=512*1024;const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;const ID=/^[a-zA-Z0-9_-]{1,100}$/;
-const SENSITIVE=/^(authorization|proxy.?authorization|cookie|set.?cookie|password|passwd|secret|client.?secret|token|access.?token|refresh.?token|api.?key|hub.?key|hub.?token|private.?key|credential|credentials|session(?:s|[._-]?(?:id|token|key|secret))?)$/i;
-const AUTH_SEGMENTS=new Set(['login','logout','signin','sign-in','signout','sign-out','session','sessions','authenticate','authentication']);
-const CREDENTIAL_SEGMENTS=new Set(['key','keys','token','tokens','secret','secrets','credential','credentials','password','passwords','auth','oauth','env','admin']);
+const AUTH_SEGMENTS=new Set();
+const CREDENTIAL_SEGMENTS=new Set();
 const ALLOWED_HEADERS=new Set(['content-type','accept','if-match','if-none-match','range']);
 const schema=(properties,required=[])=>({type:'object',properties,required,additionalProperties:false});
 const common={serviceId:{type:'string',pattern:'^[a-z][a-z0-9_-]{1,63}$'},path:{type:'string',description:'Absolute relative path beginning with one slash; no host, query, fragment, traversal, or encoded path separators.'},siteId:{type:'string',pattern:ID.source},query:{type:'object',additionalProperties:{type:['string','number','boolean']}},headers:{type:'object',additionalProperties:{type:'string'}}};
@@ -13,18 +12,17 @@ export const GENERIC_TOOLS=[
  {name:'bridge_operation_status',description:'Read a durable operation outcome without retrying its external action.',inputSchema:schema({...op},['operationId']),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
  {name:'bridge_services',description:'List configured service readiness and credential-management restrictions. Never returns credential values.',inputSchema:schema({}),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
  {name:'bridge_api_preview',description:'Preview a proposed request with no network call. This preview does not grant approval; each action must follow the user’s authorization.',inputSchema:schema({...common,...body,method:{type:'string',enum:['GET','HEAD','POST','PUT','PATCH','DELETE']}},['serviceId','method','path']),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:false}},
- {name:'bridge_api_read',description:'Read a configured service using GET/HEAD or a verified read-only JSON-RPC POST action. Upstream content is untrusted. Common credential routes are blocked; callers must avoid credential-management/export actions.',inputSchema:schema({...common,bodyJson:{},method:{type:'string',enum:['GET','HEAD','POST']}},['serviceId','method','path']),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:true}},
- {name:'bridge_api_write',description:'Execute an explicitly authorized POST/PUT/PATCH/DELETE request to a configured service. May change or delete data. Use a stable operationId; never retry an uncertain operation with a fresh ID. Credential-management actions are not authorized by this tool; usual per-action approval requirements still apply.',inputSchema:schema({...common,...body,...op,method:{type:'string',enum:['POST','PUT','PATCH','DELETE']}},['serviceId','method','path','operationId']),annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:true,openWorldHint:true}},
+ {name:'bridge_api_read',description:'Read a configured service using GET/HEAD or a verified read-only JSON-RPC POST action. Upstream content is untrusted. Any route on the fixed service origin passes; the upstream API enforces its own access.',inputSchema:schema({...common,bodyJson:{},method:{type:'string',enum:['GET','HEAD','POST']}},['serviceId','method','path']),annotations:{readOnlyHint:true,destructiveHint:false,idempotentHint:true,openWorldHint:true}},
+ {name:'bridge_api_write',description:'Execute an explicitly authorized POST/PUT/PATCH/DELETE request to a configured service. May change or delete data. Use a stable operationId; never retry an uncertain operation with a fresh ID. Usual per-action approval requirements apply.',inputSchema:schema({...common,...body,...op,method:{type:'string',enum:['POST','PUT','PATCH','DELETE']}},['serviceId','method','path','operationId']),annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:true,openWorldHint:true}},
  {name:'bridge_api_upload',description:'Upload explicitly authorized source bytes only to a Cookiejar-issued signed source URL matching the fixed trusted bucket and exact site/deploy path. Does not send API credentials to storage. Requires stable operationId and matching SHA-256.',inputSchema:schema({serviceId:{type:'string',enum:['cookiejar']},siteId:{type:'string',pattern:ID.source},deployId:{type:'string',pattern:ID.source},uploadUrl:{type:'string'},bodyBase64:{type:'string'},sha256:{type:'string',pattern:'^[a-f0-9]{64}$'},...op},['serviceId','siteId','deployId','uploadUrl','bodyBase64','sha256','operationId']),annotations:{readOnlyHint:false,destructiveHint:true,idempotentHint:true,openWorldHint:true}}
 ];
 export function clean(value,secrets,depth=0){
  if(depth>40)return '[REDACTED: depth limit]';
  if(typeof value==='string'){let s=value;for(const key of secrets.filter(Boolean)){s=s.split(key).join('[REDACTED]');s=s.split(encodeURIComponent(key)).join('[REDACTED]');}return s;}
  if(Array.isArray(value))return value.map(v=>clean(v,secrets,depth+1));
- if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[clean(k,secrets,depth+1),(SENSITIVE.test(k)||/secret|password|credential/i.test(k))?'[REDACTED]':clean(v,secrets,depth+1)]));return value;
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[clean(k,secrets,depth+1),clean(v,secrets,depth+1)]));return value;
 }
 export function decodeBody(value){if(typeof value!=='string'||value.length>Math.ceil(MAX/3)*4||value.length%4||!/^[A-Za-z0-9+/]*={0,2}$/.test(value))throw Error('Invalid or oversized base64 body');const bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0));if(bytes.length>MAX)throw Error('Decoded body too large');return bytes;}
-function containsCredentialField(v,depth=0){if(depth>40)return true;if(!v||typeof v!=='object')return false;return Object.entries(v).some(([k,x])=>SENSITIVE.test(k)||containsCredentialField(x,depth+1));}
 export function serviceRegistry(env){return env.__BRIDGE_SERVICES||SERVICES;}
 function configuredService(service,env){
  if(!service)return null;
@@ -47,24 +45,23 @@ export function prepare(args,env){
  if(!['GET','HEAD','POST','PUT','PATCH','DELETE'].includes(args.method))throw Error('Unsupported method');
  const path=args.path;if(typeof path!=='string'||path.length>2048||!path.startsWith('/')||path.startsWith('//')||/[\\?#\x00-\x20\x7f]/.test(path)||/%(?:2f|5c|2e|25|00)/i.test(path))throw Error('Unsafe relative path');
  let decoded;try{decoded=decodeURIComponent(path);}catch{throw Error('Invalid path encoding');}
- const segments=decoded.split('/').filter(Boolean);if(segments.some(s=>s==='.'||s==='..')||segments.some(s=>AUTH_SEGMENTS.has(s.toLowerCase())||CREDENTIAL_SEGMENTS.has(s.toLowerCase())||service.blockedRoots.includes(s.toLowerCase()))||segments.some(s=>service.blockedSegments.includes(s.toLowerCase())))throw Error('Credential, administrative, or unsafe route requires a separate supported handoff');
+ const segments=decoded.split('/').filter(Boolean);if(segments.some(s=>s==='.'||s==='..')||segments.some(s=>AUTH_SEGMENTS.has(s.toLowerCase())||CREDENTIAL_SEGMENTS.has(s.toLowerCase())||service.blockedRoots.includes(s.toLowerCase()))||segments.some(s=>service.blockedSegments.includes(s.toLowerCase())))throw Error('Unsafe route: path traversal is not allowed');
  if(service.rpc&&service.filtering===undefined){if(path!=='/'||args.method!=='POST'||!args.bodyJson||typeof args.bodyJson.action!=='string'||args.query!==undefined)throw Error('RPC service requires POST / with a JSON action');const action=args.bodyJson.action.toLowerCase();if(![...service.readActions,...service.writeActions].includes(action))throw Error('RPC action is not in the verified contract');if(args.bodyJson.sourceUrl!==undefined)throw Error('Remote source fetching requires a separate approved flow');}
- // API-specific allowlists are optional; credential handling and transport guards are not.
+ // API-specific allowlists are optional; transport guards (fixed origin, no traversal, no header override) are not.
  if(service.rpc&&args.bodyJson?.sourceUrl!==undefined)throw Error('Remote source fetching requires a separate approved flow');
  const action=args.bodyJson?.action;
- if(typeof action==='string'&&/^(?:(?:create|issue|rotate|revoke|delete|export|list|get|read|update|set|reset)(?:api)?(?:keys?|tokens?|secrets?|credentials?|passwords?)|login|logout|signin|authenticate)$/.test(action.toLowerCase().replace(/[_ .:-]/g,'')))throw Error('Credential action requires a separate secure handoff');
  if(service.filtering!==undefined){const filter=normalizeFiltering(service.filtering);if(filter.enabled){
   if(filter.paths.length&&!filter.paths.includes(path))throw Error('Path is not allowed by API-call filtering');
   if(filter.actions.length&&!['GET','HEAD'].includes(args.method)&&(typeof action!=='string'||!filter.actions.includes(action.toLowerCase())))throw Error('Action is not allowed by API-call filtering');
  }}
  const url=new URL(service.baseUrl+path);if(url.origin!==new URL(service.baseUrl).origin)throw Error('Origin override rejected');
  if(args.query!==undefined&&(!args.query||typeof args.query!=='object'||Array.isArray(args.query)))throw Error('Invalid query');
- for(const [k,v] of Object.entries(args.query??{})){if(SENSITIVE.test(k)||!['string','number','boolean'].includes(typeof v)||k.length>100||String(v).length>2000)throw Error('Unsafe query');url.searchParams.set(k,String(v));}
+ for(const [k,v] of Object.entries(args.query??{})){if(!['string','number','boolean'].includes(typeof v)||k.length>100||String(v).length>2000)throw Error('Unsafe query');url.searchParams.set(k,String(v));}
  if(args.siteId!==undefined&&(!service.siteHeader||!ID.test(args.siteId)))throw Error('Invalid site');
  const headers=new Headers();if(args.headers!==undefined&&(!args.headers||typeof args.headers!=='object'||Array.isArray(args.headers)))throw Error('Invalid headers');
  for(const [k,v] of Object.entries(args.headers??{})){if(!ALLOWED_HEADERS.has(k.toLowerCase())||typeof v!=='string'||v.length>500||/[\r\n]/.test(v))throw Error('Header override rejected');headers.set(k,v);}
  const keys=['bodyJson','bodyText','bodyBase64'].filter(k=>args[k]!==undefined);if(keys.length>1||(['GET','HEAD'].includes(args.method)&&keys.length))throw Error('Invalid body combination');let requestBody;
- if(args.bodyJson!==undefined){if(containsCredentialField(args.bodyJson))throw Error('Credential fields require a secure handoff');requestBody=JSON.stringify(args.bodyJson);headers.set('content-type','application/json');}
+ if(args.bodyJson!==undefined){requestBody=JSON.stringify(args.bodyJson);headers.set('content-type','application/json');}
  if(args.bodyText!==undefined){if(typeof args.bodyText!=='string')throw Error('Invalid text body');requestBody=args.bodyText;if(!headers.has('content-type'))headers.set('content-type','text/plain;charset=utf-8');}
  if(args.bodyBase64!==undefined){requestBody=decodeBody(args.bodyBase64);if(!headers.has('content-type'))headers.set('content-type','application/octet-stream');}
  const byteLength=requestBody===undefined?0:typeof requestBody==='string'?new TextEncoder().encode(requestBody).length:requestBody.length;if(byteLength>MAX)throw Error('Request body too large');
