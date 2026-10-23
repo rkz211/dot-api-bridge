@@ -57,7 +57,7 @@ export function createHandler(fetcher = (...args) => globalThis.fetch(...args)) 
     try {rpc = await readRequest(request);} catch {return error(null, -32700, 'Invalid or oversized JSON');}
     const id = rpc?.id ?? null;
     if (!rpc || Array.isArray(rpc) || rpc.jsonrpc !== '2.0' || typeof rpc.method !== 'string') return error(id, -32600, 'Invalid request');
-    if (rpc.method === 'initialize') return result(id, {protocolVersion: '2024-11-05', capabilities: {tools: {}}, serverInfo: {name: 'dot-api-bridge', version: '0.3.0'}});
+    if (rpc.method === 'initialize') return result(id, {protocolVersion: '2024-11-05', capabilities: {tools: {}}, serverInfo: {name: 'dot-api-bridge', version: '0.4.0'}});
     if (rpc.method === 'notifications/initialized') return new Response(null, {status: 202});
     if (rpc.method === 'ping') return result(id, {});
     if (rpc.method === 'tools/list') return result(id, {tools: TOOLS});
